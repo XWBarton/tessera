@@ -310,6 +310,8 @@ export default function SpecimenFormPage() {
           <Form.Item name="collection_location_text" label="Location Description">
             <Input placeholder="e.g. Wetland near creek, 200m from road" />
           </Form.Item>
+          <Form.Item name="collection_lat" hidden><Input /></Form.Item>
+          <Form.Item name="collection_lon" hidden><Input /></Form.Item>
 
           <Form.Item name="storage_location" label="Storage Location">
             <Input placeholder="e.g. Freezer-A1, Shelf-3" />

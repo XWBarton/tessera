@@ -1,6 +1,7 @@
 import {
   BarChart,
   Bar,
+  Cell,
   XAxis,
   YAxis,
   Tooltip,
@@ -11,6 +12,17 @@ import type { Specimen } from '../../types'
 interface Props {
   specimens: Specimen[]
 }
+
+const GREEN_SHADES = [
+  '#1b5e20',
+  '#2e7d32',
+  '#388e3c',
+  '#43a047',
+  '#558b2f',
+  '#33691e',
+  '#00695c',
+  '#004d40',
+]
 
 export default function SpecimensByProject({ specimens }: Props) {
   const counts: Record<string, number> = {}
@@ -28,7 +40,11 @@ export default function SpecimensByProject({ specimens }: Props) {
         <XAxis dataKey="name" angle={-30} textAnchor="end" interval={0} />
         <YAxis />
         <Tooltip />
-        <Bar dataKey="value" fill="#2e7d32" name="Specimens" />
+        <Bar dataKey="value" name="Specimens">
+          {data.map((_, i) => (
+            <Cell key={i} fill={GREEN_SHADES[i % GREEN_SHADES.length]} />
+          ))}
+        </Bar>
       </BarChart>
     </ResponsiveContainer>
   )

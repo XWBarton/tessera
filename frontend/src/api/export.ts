@@ -45,6 +45,14 @@ export const exportBySpecies = async (speciesId: number): Promise<void> => {
   downloadBlob(response.data, `species_${speciesId}_specimens.csv`)
 }
 
+export const restoreBackup = async (file: File): Promise<void> => {
+  const formData = new FormData()
+  formData.append('file', file)
+  await apiClient.post('/export/restore', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+}
+
 export const downloadBackup = async (): Promise<void> => {
   const response = await apiClient.get('/export/backup', { responseType: 'blob' })
   const disposition = response.headers['content-disposition'] || ''

@@ -1,8 +1,11 @@
 import csv
 import io
+import os
+import shutil
 import sqlite3
+import tempfile
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from ..dependencies import get_db, get_current_user, require_admin
@@ -148,6 +151,65 @@ def export_by_species(
             "Content-Disposition": f'attachment; filename="species_{species_id}_specimens.csv"'
         },
     )
+
+
+@router.post("/restore")
+async def restore_backup(
+    file: UploadFile,
+    _: User = Depends(require_admin),
+):
+    from ..database import engine
+
+    db_path = settings.DATABASE_URL.replace("sqlite:///", "")
+    data = await file.read()
+
+    # Validate SQLite magic bytes
+    if not data.startswith(b"SQLite format 3\x00"):
+        raise HTTPException(
+            status_code=400,
+            detail="File does not appear to be a valid SQLite database.",
+        )
+
+    # Write to a temp file and verify it opens cleanly
+    tmp_fd, tmp_path = tempfile.mkstemp(suffix=".db")
+    try:
+        with os.fdopen(tmp_fd, "wb") as f:
+            f.write(data)
+        test_conn = sqlite3.connect(tmp_path)
+        try:
+            test_conn.execute("SELECT name FROM sqlite_master LIMIT 1").fetchall()
+        finally:
+            test_conn.close()
+    except Exception as exc:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise HTTPException(status_code=400, detail=f"Invalid database file: {exc}")
+
+    # Close all pooled connections
+    engine.dispose()
+
+    # Use SQLite's own backup API to write restored data into the live file.
+    # This correctly handles WAL mode — a plain file swap leaves the old
+    # -wal/-shm files which SQLite would re-apply on next open, losing the restore.
+    try:
+        src = sqlite3.connect(tmp_path)
+        dst = sqlite3.connect(db_path)
+        try:
+            src.backup(dst)
+        finally:
+            dst.close()
+            src.close()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Restore failed: {exc}")
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+
+    return {"status": "ok", "message": "Database restored. Please refresh the application."}
 
 
 @router.get("/backup")

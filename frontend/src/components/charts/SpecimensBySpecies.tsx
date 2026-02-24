@@ -6,16 +6,16 @@ interface Props {
 }
 
 const COLORS = [
+  '#1b5e20',
   '#2e7d32',
   '#388e3c',
+  '#558b2f',
+  '#33691e',
   '#43a047',
-  '#4caf50',
+  '#00695c',
+  '#004d40',
   '#66bb6a',
   '#81c784',
-  '#a5d6a7',
-  '#1565c0',
-  '#e65100',
-  '#757575',
 ]
 
 export default function SpecimensBySpecies({ specimens }: Props) {

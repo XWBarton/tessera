@@ -7,9 +7,23 @@ import {
   Tooltip,
   ResponsiveContainer,
   CartesianGrid,
+  Legend,
 } from 'recharts'
 import { useSpecimens } from '../hooks/useSpecimens'
 import { useMemo } from 'react'
+
+const PALETTE = [
+  '#1677ff',
+  '#fa8c16',
+  '#722ed1',
+  '#13c2c2',
+  '#f5222d',
+  '#52c41a',
+  '#eb2f96',
+  '#2f54eb',
+  '#fa541c',
+  '#fadb14',
+]
 
 export default function TimelinePage() {
   const { data } = useSpecimens({
@@ -18,12 +32,12 @@ export default function TimelinePage() {
     sort_dir: 'asc',
   })
 
-  const { chartData, projectNames } = useMemo(() => {
+  const { chartDataByProject, projectNames } = useMemo(() => {
     const items = data?.items || []
     const projectIndex: Record<string, number> = {}
     let idx = 0
 
-    const chartData = items
+    const allPoints = items
       .filter((s) => s.collection_date)
       .map((s) => {
         const project = s.project?.code || 'Unknown'
@@ -40,21 +54,27 @@ export default function TimelinePage() {
         }
       })
 
-    return { chartData, projectNames: Object.keys(projectIndex) }
+    const chartDataByProject: Record<string, typeof allPoints> = {}
+    allPoints.forEach((pt) => {
+      if (!chartDataByProject[pt.project]) chartDataByProject[pt.project] = []
+      chartDataByProject[pt.project].push(pt)
+    })
+
+    return { chartDataByProject, projectNames: Object.keys(projectIndex) }
   }, [data])
 
   return (
     <div>
       <Typography.Title level={3}>Collection Timeline</Typography.Title>
       <Card>
-        {chartData.length === 0 ? (
+        {Object.keys(chartDataByProject).length === 0 ? (
           <div style={{ textAlign: 'center', padding: 40, color: '#888' }}>
             No tubes with collection dates to display.
           </div>
         ) : (
           <ResponsiveContainer
             width="100%"
-            height={Math.max(300, projectNames.length * 60 + 100)}
+            height={Math.max(300, projectNames.length * 60 + 120)}
           >
             <ScatterChart
               margin={{ left: 90, right: 20, top: 20, bottom: 50 }}
@@ -108,7 +128,16 @@ export default function TimelinePage() {
                   )
                 }}
               />
-              <Scatter data={chartData} fill="#2e7d32" opacity={0.8} />
+              <Legend verticalAlign="top" />
+              {Object.entries(chartDataByProject).map(([project, pts], i) => (
+                <Scatter
+                  key={project}
+                  name={project}
+                  data={pts}
+                  fill={PALETTE[i % PALETTE.length]}
+                  opacity={0.85}
+                />
+              ))}
             </ScatterChart>
           </ResponsiveContainer>
         )}

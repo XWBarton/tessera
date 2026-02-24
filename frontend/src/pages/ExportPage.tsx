@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { Button, Card, Select, Typography, Space, message, Divider } from 'antd'
-import { DownloadOutlined, DatabaseOutlined } from '@ant-design/icons'
+import { Button, Card, Select, Typography, Space, message, Divider, Modal, Upload } from 'antd'
+import type { UploadFile } from 'antd'
+import { DownloadOutlined, DatabaseOutlined, UploadOutlined } from '@ant-design/icons'
 import { useProjects } from '../hooks/useProjects'
 import { useUsers } from '../hooks/useUsers'
 import { useSpecies } from '../hooks/useSpecies'
@@ -11,6 +12,7 @@ import {
   exportByCollector,
   exportBySpecies,
   downloadBackup,
+  restoreBackup,
 } from '../api/export'
 
 export default function ExportPage() {
@@ -22,6 +24,38 @@ export default function ExportPage() {
   const [selectedCollector, setSelectedCollector] = useState<number>()
   const [selectedSpecies, setSelectedSpecies] = useState<number>()
   const [loading, setLoading] = useState(false)
+  const [restoreFile, setRestoreFile] = useState<File | null>(null)
+  const [restoreFileList, setRestoreFileList] = useState<UploadFile[]>([])
+  const [restoreLoading, setRestoreLoading] = useState(false)
+
+  const handleRestore = () => {
+    if (!restoreFile) return
+    Modal.confirm({
+      title: 'Restore Database?',
+      content: (
+        <span>
+          This will permanently replace <strong>all current data</strong> with the contents of{' '}
+          <strong>{restoreFile.name}</strong>. This cannot be undone.
+        </span>
+      ),
+      okText: 'Yes, Restore',
+      okType: 'danger',
+      cancelText: 'Cancel',
+      onOk: async () => {
+        setRestoreLoading(true)
+        try {
+          await restoreBackup(restoreFile)
+          message.success('Database restored successfully. Please refresh the page.')
+          setRestoreFile(null)
+          setRestoreFileList([])
+        } catch {
+          message.error('Restore failed. Make sure the file is a valid Tessera backup.')
+        } finally {
+          setRestoreLoading(false)
+        }
+      },
+    })
+  }
 
   const handle = async (fn: () => Promise<void>) => {
     setLoading(true)
@@ -135,7 +169,7 @@ export default function ExportPage() {
       {user?.is_admin && (
         <>
           <Divider />
-          <Card title="Database Backup" style={{ borderColor: '#faad14' }}>
+          <Card title="Database Backup" style={{ borderColor: '#faad14', marginBottom: 16 }}>
             <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
               Downloads the full SQLite database file. Use this to back up all data before updates.
             </Typography.Text>
@@ -146,6 +180,40 @@ export default function ExportPage() {
             >
               Download Backup (.db)
             </Button>
+          </Card>
+          <Card title="Restore from Backup" style={{ borderColor: '#ff4d4f' }}>
+            <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 4 }}>
+              Upload a previously downloaded <code>.db</code> backup file to restore all data.
+            </Typography.Text>
+            <Typography.Text type="danger" style={{ display: 'block', marginBottom: 12 }}>
+              Warning: this permanently replaces all current data.
+            </Typography.Text>
+            <Space>
+              <Upload
+                accept=".db"
+                maxCount={1}
+                fileList={restoreFileList}
+                beforeUpload={(file) => {
+                  setRestoreFile(file)
+                  setRestoreFileList([{ uid: '-1', name: file.name, status: 'done' }])
+                  return false
+                }}
+                onRemove={() => {
+                  setRestoreFile(null)
+                  setRestoreFileList([])
+                }}
+              >
+                <Button icon={<UploadOutlined />}>Select Backup File</Button>
+              </Upload>
+              <Button
+                danger
+                disabled={!restoreFile}
+                loading={restoreLoading}
+                onClick={handleRestore}
+              >
+                Restore
+              </Button>
+            </Space>
           </Card>
         </>
       )}
