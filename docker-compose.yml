@@ -1,0 +1,29 @@
+version: "3.9"
+
+services:
+  backend:
+    build: ./backend
+    environment:
+      - DATABASE_URL=${DATABASE_URL:-sqlite:////data/tessera.db}
+      - SECRET_KEY=${SECRET_KEY:-changeme-use-a-long-random-secret-key-in-production}
+      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES:-480}
+      - FIRST_ADMIN_USERNAME=${FIRST_ADMIN_USERNAME:-admin}
+      - FIRST_ADMIN_PASSWORD=${FIRST_ADMIN_PASSWORD:-changeme123}
+      - FIRST_ADMIN_EMAIL=${FIRST_ADMIN_EMAIL:-admin@example.com}
+      - FIRST_ADMIN_FULL_NAME=${FIRST_ADMIN_FULL_NAME:-Administrator}
+    volumes:
+      - tessera_data:/data
+    expose:
+      - "8000"
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  tessera_data:
