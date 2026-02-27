@@ -50,7 +50,7 @@ cd tessera
 docker compose up --build
 ```
 
-Open [http://localhost](http://localhost) in your browser.
+Open [http://localhost:8520](http://localhost:8520) in your browser.
 
 On first launch the setup wizard will prompt you to create an administrator account. The default `admin/changeme123` account is removed once setup is complete.
 
