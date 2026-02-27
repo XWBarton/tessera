@@ -8,6 +8,7 @@ interface AuthContextType {
   isLoading: boolean
   login: (token: string) => Promise<void>
   logout: () => void
+  refreshUser: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | null>(null)
@@ -30,6 +31,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(me)
   }, [])
 
+  const refreshUser = useCallback(async () => {
+    const me = await getMe()
+    setUser(me)
+  }, [])
+
   useEffect(() => {
     const savedToken = localStorage.getItem('token')
     if (savedToken) {
@@ -43,7 +49,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [logout])
 
   return (
-    <AuthContext.Provider value={{ user, token, isLoading, login, logout }}>
+    <AuthContext.Provider value={{ user, token, isLoading, login, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   )

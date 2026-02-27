@@ -9,6 +9,7 @@ class SiteBase(BaseModel):
     habitat_type: Optional[str] = None
     lat: Optional[float] = None
     lon: Optional[float] = None
+    precision: Optional[str] = None
     notes: Optional[str] = None
 
 
@@ -22,6 +23,7 @@ class SiteUpdate(BaseModel):
     habitat_type: Optional[str] = None
     lat: Optional[float] = None
     lon: Optional[float] = None
+    precision: Optional[str] = None
     notes: Optional[str] = None
 
 

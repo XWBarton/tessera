@@ -33,3 +33,22 @@ export const deleteUser = async (id: number): Promise<User> => {
 export const hardDeleteUser = async (id: number): Promise<void> => {
   await apiClient.delete(`/users/${id}/hard`)
 }
+
+export const uploadAvatar = async (file: File): Promise<User> => {
+  const formData = new FormData()
+  formData.append('file', file)
+  const { data } = await apiClient.post<User>('/users/me/avatar', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+  return data
+}
+
+export const deleteAvatar = async (): Promise<User> => {
+  const { data } = await apiClient.delete<User>('/users/me/avatar')
+  return data
+}
+
+export const getAvatarBlob = async (userId: number): Promise<string> => {
+  const response = await apiClient.get(`/users/${userId}/avatar`, { responseType: 'blob' })
+  return URL.createObjectURL(response.data)
+}

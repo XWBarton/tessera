@@ -53,7 +53,9 @@ export default function SpecimenFormPage() {
   // Watch species associations to derive total count
   const watchedAssociations: SpecimenSpeciesCreate[] = Form.useWatch('species_associations', form) || []
   const derivedTotal = watchedAssociations.reduce((sum, a) => sum + (a.specimen_count || 0), 0)
-  const usesDerivedQuantity = derivedTotal > 0
+  const watchedSampleTypeId: number | undefined = Form.useWatch('sample_type_id', form)
+  const selectedSampleType = sampleTypes?.find((st) => st.id === watchedSampleTypeId)
+  const usesDerivedQuantity = selectedSampleType?.is_specimen === true
 
   useEffect(() => {
     if (isEdit && specimen) {
@@ -64,10 +66,11 @@ export default function SpecimenFormPage() {
         : 'unknown'
       setCollectorMode(mode)
       form.setFieldsValue({
-        project_id: specimen.project_id,
+        project_id: specimen.project_id,  // pre-select current project for admin edit
         collector_id: specimen.collector_id,
         collector_name: specimen.collector_name,
-        collection_date: specimen.collection_date ? dayjs(specimen.collection_date) : undefined,
+        collection_date_range_start: specimen.collection_date ? dayjs(specimen.collection_date) : undefined,
+        collection_date_range_end: specimen.collection_date_end ? dayjs(specimen.collection_date_end) : undefined,
         site_id: specimen.site_id,
         sample_type_id: specimen.sample_type_id,
         quantity_value: specimen.quantity_value,
@@ -84,7 +87,6 @@ export default function SpecimenFormPage() {
           life_stage: a.life_stage ?? null,
           sex: a.sex ?? null,
           confidence: a.confidence,
-          is_primary: a.is_primary,
         })),
       })
     } else if (!isEdit) {
@@ -110,8 +112,11 @@ export default function SpecimenFormPage() {
   }
 
   const onFinish = async (values: Record<string, unknown>) => {
-    const collectionDate = values.collection_date
-      ? dayjs(values.collection_date as string).format('YYYY-MM-DD')
+    const collectionDate = values.collection_date_range_start
+      ? dayjs(values.collection_date_range_start as string).format('YYYY-MM-DD')
+      : undefined
+    const collectionDateEnd = values.collection_date_range_end
+      ? dayjs(values.collection_date_range_end as string).format('YYYY-MM-DD')
       : undefined
     const speciesAssociations = (
       (values.species_associations as SpecimenSpeciesCreate[]) || []
@@ -129,7 +134,9 @@ export default function SpecimenFormPage() {
     try {
       if (isEdit) {
         const updatePayload: SpecimenUpdate = {
+          project_id: user?.is_admin ? (values.project_id as number | undefined) : undefined,
           collection_date: collectionDate,
+          collection_date_end: collectionDateEnd,
           collector_id: collectorId,
           collector_name: collectorName,
           site_id: values.site_id as number | undefined,
@@ -148,8 +155,10 @@ export default function SpecimenFormPage() {
         navigate(`/specimens/${specimenId}`)
       } else {
         const createPayload: SpecimenCreate = {
+          specimen_code: (values.specimen_code as string | undefined) || undefined,
           project_id: values.project_id as number,
           collection_date: collectionDate,
+          collection_date_end: collectionDateEnd,
           collector_id: collectorId,
           collector_name: collectorName,
           site_id: values.site_id as number | undefined,
@@ -191,9 +200,28 @@ export default function SpecimenFormPage() {
               />
             </Form.Item>
           )}
-          {isEdit && (
+          {!isEdit && user?.is_admin && (
+            <Form.Item
+              name="specimen_code"
+              label="Custom Code"
+              help="Leave blank to auto-generate (e.g. PROJ-042)"
+            >
+              <Input placeholder="e.g. XPG-333" style={{ maxWidth: 200 }} />
+            </Form.Item>
+          )}
+          {isEdit && !user?.is_admin && (
             <Form.Item label="Project">
               <Input disabled value={`${specimen?.project?.code} — ${specimen?.project?.name}`} />
+            </Form.Item>
+          )}
+          {isEdit && user?.is_admin && (
+            <Form.Item name="project_id" label="Project">
+              <Select
+                options={projects?.map((p) => ({
+                  value: p.id,
+                  label: `${p.code} — ${p.name}`,
+                }))}
+              />
             </Form.Item>
           )}
 
@@ -232,9 +260,18 @@ export default function SpecimenFormPage() {
             </Form.Item>
           )}
 
-          <Form.Item name="collection_date" label="Collection Date">
-            <DatePicker style={{ width: '100%' }} />
-          </Form.Item>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item name="collection_date_range_start" label="Collection Date (start)">
+                <DatePicker style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="collection_date_range_end" label="Collection Date (end)">
+                <DatePicker style={{ width: '100%' }} placeholder="Optional" />
+              </Form.Item>
+            </Col>
+          </Row>
 
           <Row gutter={16}>
             <Col span={8}>

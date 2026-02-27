@@ -1,5 +1,6 @@
+import { useRef, useEffect, useState } from 'react'
 import { Outlet, useNavigate, useLocation } from 'react-router-dom'
-import { Layout, Menu, Button, Typography, Space, Avatar } from 'antd'
+import { Layout, Menu, Button, Typography, Space, Avatar, Tooltip, message } from 'antd'
 import {
   DashboardOutlined,
   ExperimentOutlined,
@@ -12,8 +13,10 @@ import {
   SettingOutlined,
   LogoutOutlined,
   UserOutlined,
+  ImportOutlined,
 } from '@ant-design/icons'
 import { useAuth } from '../../context/AuthContext'
+import { uploadAvatar, getAvatarBlob } from '../../api/users'
 
 const { Header, Sider, Content } = Layout
 const { Text } = Typography
@@ -29,14 +32,42 @@ const menuItems = [
   { key: '/export', icon: <ExportOutlined />, label: 'Export' },
 ]
 
-const adminItem = { key: '/admin', icon: <SettingOutlined />, label: 'Settings' }
+const adminItems = [
+  { key: '/import', icon: <ImportOutlined />, label: 'Bulk Import' },
+  { key: '/admin', icon: <SettingOutlined />, label: 'Settings' },
+]
 
 export default function AppShell() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { user, logout } = useAuth()
+  const { user, logout, refreshUser } = useAuth()
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
 
-  const allItems = user?.is_admin ? [...menuItems, adminItem] : menuItems
+  useEffect(() => {
+    let url: string | null = null
+    if (user?.avatar_filename) {
+      getAvatarBlob(user.id).then((u) => { url = u; setAvatarUrl(u) }).catch(() => setAvatarUrl(null))
+    } else {
+      setAvatarUrl(null)
+    }
+    return () => { if (url) URL.revokeObjectURL(url) }
+  }, [user?.id, user?.avatar_filename])
+
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    try {
+      await uploadAvatar(file)
+      await refreshUser()
+      message.success('Profile photo updated')
+    } catch {
+      message.error('Failed to upload photo')
+    }
+    e.target.value = ''
+  }
+
+  const allItems = user?.is_admin ? [...menuItems, ...adminItems] : menuItems
 
   const selectedKey =
     allItems.find((item) => location.pathname.startsWith(item.key))?.key || '/dashboard'
@@ -86,10 +117,21 @@ export default function AppShell() {
           }}
         >
           <Space>
-            <Avatar
-              icon={<UserOutlined />}
-              style={{ backgroundColor: '#2e7d32' }}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".jpg,.jpeg,.png,.gif,.webp"
+              style={{ display: 'none' }}
+              onChange={handleAvatarChange}
             />
+            <Tooltip title="Click to change profile photo">
+              <Avatar
+                src={avatarUrl || undefined}
+                icon={!avatarUrl ? <UserOutlined /> : undefined}
+                style={{ backgroundColor: '#2e7d32', cursor: 'pointer' }}
+                onClick={() => fileInputRef.current?.click()}
+              />
+            </Tooltip>
             <Text strong>{user?.full_name}</Text>
             {user?.is_admin && (
               <Text type="secondary" style={{ fontSize: 12 }}>

@@ -55,10 +55,10 @@ export default function LoginPage() {
         </div>
         <Form form={form} onFinish={onFinish} layout="vertical" size="large">
           <Form.Item name="username" rules={[{ required: true, message: 'Username required' }]}>
-            <Input prefix={<UserOutlined />} placeholder="Username" />
+            <Input prefix={<UserOutlined />} placeholder="Username" autoFocus onPressEnter={() => form.submit()} />
           </Form.Item>
           <Form.Item name="password" rules={[{ required: true, message: 'Password required' }]}>
-            <Input.Password prefix={<LockOutlined />} placeholder="Password" />
+            <Input.Password prefix={<LockOutlined />} placeholder="Password" onPressEnter={() => form.submit()} />
           </Form.Item>
           <Form.Item style={{ marginBottom: 0 }}>
             <Button type="primary" htmlType="submit" block>

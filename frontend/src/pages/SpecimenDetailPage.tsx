@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   Card,
@@ -18,14 +18,74 @@ import {
   InputNumber,
   DatePicker,
   Divider,
+  Image,
+  Upload,
 } from 'antd'
-import { EditOutlined, DeleteOutlined, DownloadOutlined, ExperimentOutlined } from '@ant-design/icons'
+import { EditOutlined, DeleteOutlined, DownloadOutlined, ExperimentOutlined, CameraOutlined, PlusOutlined } from '@ant-design/icons'
+import type { MenuProps } from 'antd'
+import { Dropdown } from 'antd'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
-import { useSpecimen, useDeleteSpecimen } from '../hooks/useSpecimens'
+import { useSpecimen, useDeleteSpecimen, useUpdateSpecimen } from '../hooks/useSpecimens'
 import { useTubeUsage, useRecordUsage, useDeleteUsageEntry } from '../hooks/useTubeUsage'
-import { downloadLabel } from '../api/specimens'
+import { downloadLabel, ZPL_TEMPLATE_OPTIONS, getPhotos, uploadPhoto, deletePhoto, getPhotoBlob } from '../api/specimens'
+import type { ZplTemplate } from '../api/specimens'
 import { useAuth } from '../context/AuthContext'
-import type { SpecimenSpecies, TubeUsageLog } from '../types'
+import type { SpecimenSpecies, TubeUsageLog, SpecimenPhoto } from '../types'
+
+/** Loads a single photo file as a blob URL (authenticated). */
+function PhotoThumbnail({
+  specimenId,
+  photo,
+  onDelete,
+  canDelete,
+}: {
+  specimenId: number
+  photo: SpecimenPhoto
+  onDelete: () => void
+  canDelete: boolean
+}) {
+  const [blobUrl, setBlobUrl] = useState<string>()
+  useEffect(() => {
+    let url: string
+    getPhotoBlob(specimenId, photo.id).then((u) => { url = u; setBlobUrl(u) })
+    return () => { if (url) URL.revokeObjectURL(url) }
+  }, [specimenId, photo.id])
+
+  if (!blobUrl) return (
+    <div style={{ width: 120, height: 120, background: '#f5f5f5', borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <Spin size="small" />
+    </div>
+  )
+
+  return (
+    <div style={{ position: 'relative', display: 'inline-block' }}>
+      <Image
+        src={blobUrl}
+        width={120}
+        height={120}
+        style={{ objectFit: 'cover', borderRadius: 4 }}
+        preview={{ src: blobUrl }}
+        title={photo.caption || photo.original_filename}
+      />
+      {canDelete && (
+        <Popconfirm title="Delete this photo?" onConfirm={onDelete} okButtonProps={{ danger: true }}>
+          <Button
+            icon={<DeleteOutlined />}
+            size="small"
+            danger
+            style={{ position: 'absolute', top: 4, right: 4, opacity: 0.85 }}
+          />
+        </Popconfirm>
+      )}
+      {photo.caption && (
+        <div style={{ fontSize: 11, color: '#555', marginTop: 2, maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {photo.caption}
+        </div>
+      )}
+    </div>
+  )
+}
 
 const CONFIDENCE_COLORS: Record<string, string> = {
   Confirmed: 'green',
@@ -50,15 +110,57 @@ export default function SpecimenDetailPage() {
   const deleteSpecimen = useDeleteSpecimen()
   const recordUsage = useRecordUsage(specimenId)
   const deleteUsage = useDeleteUsageEntry(specimenId)
+  const queryClient = useQueryClient()
+  const updateSpecimen = useUpdateSpecimen(specimenId)
   const [usageModalOpen, setUsageModalOpen] = useState(false)
   const [usageForm] = Form.useForm()
   // breakdown counts keyed by association index
   const [breakdownCounts, setBreakdownCounts] = useState<Record<number, number>>({})
+  const [codeModalOpen, setCodeModalOpen] = useState(false)
+  const [newCode, setNewCode] = useState('')
+
+  // Photos
+  const { data: photos = [], refetch: refetchPhotos } = useQuery({
+    queryKey: ['photos', specimenId],
+    queryFn: () => getPhotos(specimenId),
+  })
+  const [photoModalOpen, setPhotoModalOpen] = useState(false)
+  const [pendingFile, setPendingFile] = useState<File | null>(null)
+  const [photoCaption, setPhotoCaption] = useState('')
+  const [photoUploading, setPhotoUploading] = useState(false)
+
+  const handlePhotoUpload = async () => {
+    if (!pendingFile) return
+    setPhotoUploading(true)
+    try {
+      await uploadPhoto(specimenId, pendingFile, photoCaption || undefined)
+      message.success('Photo uploaded')
+      setPendingFile(null)
+      setPhotoCaption('')
+      setPhotoModalOpen(false)
+      refetchPhotos()
+      queryClient.invalidateQueries({ queryKey: ['photos', specimenId] })
+    } catch {
+      message.error('Upload failed')
+    } finally {
+      setPhotoUploading(false)
+    }
+  }
+
+  const handlePhotoDelete = async (photo: SpecimenPhoto) => {
+    try {
+      await deletePhoto(specimenId, photo.id)
+      message.success('Photo deleted')
+      refetchPhotos()
+      queryClient.invalidateQueries({ queryKey: ['photos', specimenId] })
+    } catch {
+      message.error('Failed to delete photo')
+    }
+  }
 
   if (isLoading) return <Spin />
   if (!specimen) return <Typography.Text>Tube not found</Typography.Text>
 
-  const primarySpecies = specimen.species_associations.find((a) => a.is_primary)
   const countedAssociations = specimen.species_associations.filter(
     (a) => (a.specimen_count ?? 0) > 0,
   )
@@ -72,6 +174,18 @@ export default function SpecimenDetailPage() {
       navigate('/specimens')
     } catch {
       message.error('Failed to delete tube')
+    }
+  }
+
+  const handleCodeChange = async () => {
+    const trimmed = newCode.trim()
+    if (!trimmed) return
+    try {
+      await updateSpecimen.mutateAsync({ specimen_code: trimmed })
+      message.success('Code updated')
+      setCodeModalOpen(false)
+    } catch {
+      message.error('Failed to update code — it may already exist')
     }
   }
 
@@ -175,12 +289,6 @@ export default function SpecimenDetailPage() {
       key: 'confidence',
       render: (c: string) => <Tag color={CONFIDENCE_COLORS[c]}>{c}</Tag>,
     },
-    {
-      title: 'Primary',
-      dataIndex: 'is_primary',
-      key: 'is_primary',
-      render: (v: boolean) => (v ? <Tag color="green">Primary</Tag> : '—'),
-    },
   ]
 
   const usageColumns = [
@@ -247,14 +355,34 @@ export default function SpecimenDetailPage() {
       >
         <Typography.Title level={3} style={{ margin: 0 }}>
           {specimen.specimen_code}
+          {user?.is_admin && (
+            <Button
+              icon={<EditOutlined />}
+              type="text"
+              size="small"
+              style={{ marginLeft: 6, verticalAlign: 'middle', color: '#aaa' }}
+              title="Change tube code"
+              onClick={() => { setNewCode(specimen.specimen_code); setCodeModalOpen(true) }}
+            />
+          )}
         </Typography.Title>
         <Space>
-          <Button
-            icon={<DownloadOutlined />}
-            onClick={() => downloadLabel(specimenId, 'zpl')}
+          <Dropdown
+            menu={{
+              items: ZPL_TEMPLATE_OPTIONS.map((t) => ({
+                key: t.value,
+                label: (
+                  <span>
+                    <strong>{t.label}</strong>
+                    <span style={{ color: '#888', marginLeft: 8, fontSize: 12 }}>{t.description}</span>
+                  </span>
+                ),
+                onClick: () => downloadLabel(specimenId, 'zpl', t.value as ZplTemplate),
+              })) satisfies MenuProps['items'],
+            }}
           >
-            ZPL Label
-          </Button>
+            <Button icon={<DownloadOutlined />}>ZPL Label ▾</Button>
+          </Dropdown>
           <Button
             icon={<DownloadOutlined />}
             onClick={() => downloadLabel(specimenId, 'csv')}
@@ -315,7 +443,11 @@ export default function SpecimenDetailPage() {
             ) : '—'}
           </Descriptions.Item>
           <Descriptions.Item label="Collection Date">
-            {specimen.collection_date || '—'}
+            {specimen.collection_date
+              ? specimen.collection_date_end && specimen.collection_date_end !== specimen.collection_date
+                ? `${specimen.collection_date} – ${specimen.collection_date_end}`
+                : specimen.collection_date
+              : '—'}
           </Descriptions.Item>
           <Descriptions.Item label="Collector">
             {specimen.collector?.full_name || specimen.collector_name || <em style={{ color: '#999' }}>Unknown</em>}
@@ -344,16 +476,15 @@ export default function SpecimenDetailPage() {
           <Descriptions.Item label="Storage">
             {specimen.storage_location || '—'}
           </Descriptions.Item>
-          <Descriptions.Item label="Primary Species">
-            {primarySpecies ? (
-              <Tag color={CONFIDENCE_COLORS[primarySpecies.confidence]}>
-                <em>
-                  {primarySpecies.species?.scientific_name ||
-                    primarySpecies.free_text_species}
-                </em>
-              </Tag>
-            ) : (
-              '—'
+          <Descriptions.Item label="Species">
+            {specimen.species_associations.length === 0 ? '—' : (
+              <Space size={4} wrap>
+                {specimen.species_associations.map((a) => (
+                  <Tag key={a.id} color={CONFIDENCE_COLORS[a.confidence]}>
+                    <em>{a.species?.scientific_name || a.free_text_species}</em>
+                  </Tag>
+                ))}
+              </Space>
             )}
           </Descriptions.Item>
           <Descriptions.Item label="Notes" span={2}>
@@ -379,6 +510,85 @@ export default function SpecimenDetailPage() {
         pagination={false}
         locale={{ emptyText: 'No usage recorded yet' }}
       />
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 24, marginBottom: 8 }}>
+        <Typography.Title level={4} style={{ margin: 0 }}>Photos</Typography.Title>
+        <Button icon={<CameraOutlined />} onClick={() => setPhotoModalOpen(true)}>
+          Add Photo
+        </Button>
+      </div>
+      <Card>
+        {photos.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '24px 0', color: '#aaa' }}>
+            <CameraOutlined style={{ fontSize: 32, marginBottom: 8, display: 'block' }} />
+            No photos yet — click Add Photo to upload one.
+          </div>
+        ) : (
+          <Image.PreviewGroup>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+              {photos.map((photo) => (
+                <PhotoThumbnail
+                  key={photo.id}
+                  specimenId={specimenId}
+                  photo={photo}
+                  canDelete={photo.uploaded_by_id === user?.id || !!user?.is_admin}
+                  onDelete={() => handlePhotoDelete(photo)}
+                />
+              ))}
+            </div>
+          </Image.PreviewGroup>
+        )}
+      </Card>
+
+      {/* Upload photo modal */}
+      <Modal
+        title="Add Photo"
+        open={photoModalOpen}
+        onCancel={() => { setPhotoModalOpen(false); setPendingFile(null); setPhotoCaption('') }}
+        footer={[
+          <Button key="cancel" onClick={() => { setPhotoModalOpen(false); setPendingFile(null); setPhotoCaption('') }}>
+            Cancel
+          </Button>,
+          <Button key="upload" type="primary" loading={photoUploading} disabled={!pendingFile} onClick={handlePhotoUpload}>
+            Upload
+          </Button>,
+        ]}
+      >
+        <Upload.Dragger
+          accept=".jpg,.jpeg,.png,.gif,.webp,.heic,.heif,.tiff,.tif"
+          maxCount={1}
+          beforeUpload={(file) => { setPendingFile(file); return false }}
+          onRemove={() => setPendingFile(null)}
+          fileList={pendingFile ? [{ uid: '-1', name: pendingFile.name, status: 'done' }] : []}
+          style={{ marginBottom: 16 }}
+        >
+          <p className="ant-upload-drag-icon"><PlusOutlined /></p>
+          <p className="ant-upload-text">Click or drag a photo here</p>
+          <p className="ant-upload-hint">JPEG, PNG, HEIC, TIFF, WebP · max 50 MB</p>
+        </Upload.Dragger>
+        <Input
+          placeholder="Caption (optional)"
+          value={photoCaption}
+          onChange={(e) => setPhotoCaption(e.target.value)}
+        />
+      </Modal>
+
+      <Modal
+        title="Change Tube Code"
+        open={codeModalOpen}
+        onCancel={() => setCodeModalOpen(false)}
+        onOk={handleCodeChange}
+        okText="Save"
+        confirmLoading={updateSpecimen.isPending}
+      >
+        <Input
+          value={newCode}
+          onChange={(e) => setNewCode(e.target.value)}
+          onPressEnter={handleCodeChange}
+          placeholder="New tube code"
+          style={{ marginTop: 8 }}
+        />
+      </Modal>
 
       <Modal
         title="Record Usage"

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Button, Select, Input, InputNumber, Checkbox, Card, Row, Col } from 'antd'
+import { Button, Select, Input, InputNumber, Card, Row, Col } from 'antd'
 import { PlusOutlined, DeleteOutlined } from '@ant-design/icons'
 import { useSpecies } from '../../hooks/useSpecies'
 import { useLookupOptions } from '../../hooks/useLookups'
@@ -29,31 +29,22 @@ export default function SpeciesAssociationForm({ value = [], onChange }: Props) 
     update([
       ...value,
       {
-        species_id: undefined,
+        species_id: 0,
         free_text_species: undefined,
         specimen_count: null,
         life_stage: null,
         sex: null,
         confidence: 'Unknown',
-        is_primary: value.length === 0,
       },
     ])
   }
 
   const removeAssoc = (index: number) => {
-    const next = value.filter((_, i) => i !== index)
-    if (next.length > 0 && !next.some((a) => a.is_primary)) {
-      next[0] = { ...next[0], is_primary: true }
-    }
-    update(next)
+    update(value.filter((_, i) => i !== index))
   }
 
   const updateAssoc = (index: number, patch: Partial<SpecimenSpeciesCreate>) => {
     update(value.map((a, i) => (i === index ? { ...a, ...patch } : a)))
-  }
-
-  const setPrimary = (index: number) => {
-    update(value.map((a, i) => ({ ...a, is_primary: i === index })))
   }
 
   return (
@@ -84,7 +75,7 @@ export default function SpeciesAssociationForm({ value = [], onChange }: Props) 
                     showSearch
                     filterOption={false}
                     onSearch={setSearchQuery}
-                    value={assoc.species_id ?? undefined}
+                    value={assoc.species_id || undefined}
                     onChange={(v) =>
                       updateAssoc(index, {
                         species_id: v,
@@ -135,15 +126,7 @@ export default function SpeciesAssociationForm({ value = [], onChange }: Props) 
                   onChange={(v) => updateAssoc(index, { confidence: v })}
                 />
               </Col>
-              <Col span={3}>
-                <Checkbox
-                  checked={assoc.is_primary}
-                  onChange={() => setPrimary(index)}
-                >
-                  Primary
-                </Checkbox>
-              </Col>
-              <Col span={1}>
+              <Col span={4}>
                 <Button
                   icon={<DeleteOutlined />}
                   size="small"

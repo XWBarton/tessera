@@ -5,6 +5,7 @@ export interface User {
   email: string
   is_admin: boolean
   is_active: boolean
+  avatar_filename?: string
   created_at: string
 }
 
@@ -32,6 +33,7 @@ export interface Site {
   habitat_type?: string
   lat?: number
   lon?: number
+  precision?: string
   notes?: string
   created_at: string
 }
@@ -45,7 +47,6 @@ export interface SpecimenSpecies {
   life_stage?: string
   sex?: string
   confidence: 'Confirmed' | 'Probable' | 'Possible' | 'Unknown'
-  is_primary: boolean
   created_at: string
   species?: Species
 }
@@ -56,6 +57,7 @@ export interface Specimen {
   project_id: number
   sequence_number: number
   collection_date?: string
+  collection_date_end?: string
   collector_id?: number
   collector_name?: string
   entered_by_id: number
@@ -98,12 +100,13 @@ export interface SpecimenSpeciesCreate {
   life_stage?: string | null
   sex?: string | null
   confidence: string
-  is_primary: boolean
 }
 
 export interface SpecimenCreate {
+  specimen_code?: string
   project_id: number
   collection_date?: string
+  collection_date_end?: string
   collector_id?: number
   collector_name?: string
   site_id?: number
@@ -119,7 +122,10 @@ export interface SpecimenCreate {
 }
 
 export interface SpecimenUpdate {
+  specimen_code?: string
+  project_id?: number
   collection_date?: string
+  collection_date_end?: string
   collector_id?: number
   collector_name?: string
   site_id?: number
@@ -135,17 +141,39 @@ export interface SpecimenUpdate {
   species_associations?: SpecimenSpeciesCreate[]
 }
 
+export interface BulkImportRow {
+  specimen_code: string
+  project_code: string
+  collection_date?: string
+  collection_date_end?: string
+  collector_name?: string
+  site_name?: string
+  sample_type_name?: string
+  quantity_value?: number
+  quantity_unit?: string
+  storage_location?: string
+  notes?: string
+  species?: string
+}
+
+export interface BulkImportResult {
+  created: number
+  errors: string[]
+}
+
 export interface SampleType {
   id: number
   name: string
   default_unit?: string
   is_default: boolean
+  is_specimen: boolean
   created_at: string
 }
 
 export interface SampleTypeCreate {
   name: string
   default_unit?: string
+  is_specimen?: boolean
 }
 
 export interface BreakdownItem {
@@ -183,6 +211,7 @@ export interface SiteCreate {
   habitat_type?: string
   lat?: number
   lon?: number
+  precision?: string
   notes?: string
 }
 
@@ -192,7 +221,19 @@ export interface SiteUpdate {
   habitat_type?: string
   lat?: number
   lon?: number
+  precision?: string
   notes?: string
+}
+
+export interface SpecimenPhoto {
+  id: number
+  specimen_id: number
+  filename: string
+  original_filename: string
+  caption?: string
+  uploaded_by_id: number
+  uploaded_at: string
+  uploaded_by?: { id: number; full_name: string }
 }
 
 export interface SpecimenFilters {

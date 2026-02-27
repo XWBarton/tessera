@@ -16,8 +16,8 @@ import {
   Popconfirm,
 } from 'antd'
 import { PlusOutlined, DeleteOutlined } from '@ant-design/icons'
-import { useUsers, useCreateUser, useUpdateUser, useHardDeleteUser } from '../hooks/useUsers'
-import { useSampleTypes, useCreateSampleType, useDeleteSampleType } from '../hooks/useSampleTypes'
+import { useUsers, useCreateUser, useUpdateUser } from '../hooks/useUsers'
+import { useSampleTypes, useCreateSampleType, useUpdateSampleType, useDeleteSampleType } from '../hooks/useSampleTypes'
 import type { User, SampleType } from '../types'
 import { useAuth } from '../context/AuthContext'
 import { useLookupOptions, useAddLookupOption, useDeleteLookupOption } from '../hooks/useLookups'
@@ -27,7 +27,6 @@ function UsersTab() {
   const { data: users, isLoading } = useUsers()
   const createUser = useCreateUser()
   const updateUser = useUpdateUser()
-  const hardDelete = useHardDeleteUser()
   const [modalOpen, setModalOpen] = useState(false)
   const [form] = Form.useForm()
 
@@ -82,34 +81,6 @@ function UsersTab() {
               .catch(() => message.error('Failed to update user'))
           }
         />
-      ),
-    },
-    {
-      title: 'Actions',
-      key: 'actions',
-      render: (_: unknown, record: User) => (
-        <Popconfirm
-          title={`Permanently delete ${record.username}?`}
-          description="This cannot be undone. The user will be removed from the database."
-          okText="Delete"
-          okButtonProps={{ danger: true }}
-          disabled={record.id === currentUser?.id}
-          onConfirm={() =>
-            hardDelete
-              .mutateAsync(record.id)
-              .then(() => message.success('User deleted'))
-              .catch(() => message.error('Failed to delete user'))
-          }
-        >
-          <Button
-            icon={<DeleteOutlined />}
-            size="small"
-            danger
-            disabled={record.id === currentUser?.id}
-          >
-            Delete
-          </Button>
-        </Popconfirm>
       ),
     },
   ]
@@ -197,13 +168,14 @@ function UsersTab() {
 function SampleTypesTab() {
   const { data: sampleTypes, isLoading } = useSampleTypes()
   const createSampleType = useCreateSampleType()
+  const updateSampleType = useUpdateSampleType()
   const deleteSampleType = useDeleteSampleType()
   const [modalOpen, setModalOpen] = useState(false)
   const [form] = Form.useForm()
   const { data: unitOpts } = useLookupOptions('unit')
   const unitOptions = (unitOpts ?? []).map((o) => ({ value: o.value }))
 
-  const handleCreate = async (values: { name: string; default_unit?: string }) => {
+  const handleCreate = async (values: { name: string; default_unit?: string; is_specimen: boolean }) => {
     try {
       await createSampleType.mutateAsync(values)
       message.success('Sample type created')
@@ -222,6 +194,23 @@ function SampleTypesTab() {
       dataIndex: 'default_unit',
       key: 'default_unit',
       render: (v: string) => v ? <Tag>{v}</Tag> : '—',
+    },
+    {
+      title: 'Auto-count',
+      dataIndex: 'is_specimen',
+      key: 'is_specimen',
+      render: (v: boolean, record: SampleType) => (
+        <Switch
+          checked={v}
+          checkedChildren="Specimen"
+          unCheckedChildren="Sample"
+          onChange={(checked) =>
+            updateSampleType
+              .mutateAsync({ id: record.id, data: { is_specimen: checked } })
+              .catch(() => message.error('Failed to update'))
+          }
+        />
+      ),
     },
     {
       title: 'Type',
@@ -267,7 +256,7 @@ function SampleTypesTab() {
         onCancel={() => setModalOpen(false)}
         footer={null}
       >
-        <Form form={form} layout="vertical" onFinish={handleCreate}>
+        <Form form={form} layout="vertical" onFinish={handleCreate} initialValues={{ is_specimen: false }}>
           <Form.Item name="name" label="Name" rules={[{ required: true }]}>
             <Input placeholder="e.g. Formalin-fixed tissue" />
           </Form.Item>
@@ -279,6 +268,14 @@ function SampleTypesTab() {
                 (option?.value as string).toLowerCase().includes(input.toLowerCase())
               }
             />
+          </Form.Item>
+          <Form.Item
+            name="is_specimen"
+            label="Auto-count quantity"
+            valuePropName="checked"
+            extra="When on, quantity is derived from the species breakdown counts instead of being entered manually."
+          >
+            <Switch checkedChildren="Specimen" unCheckedChildren="Sample" />
           </Form.Item>
           <Form.Item>
             <Space>
@@ -373,6 +370,27 @@ function OptionsTab() {
   )
 }
 
+function AboutTab() {
+  return (
+    <div style={{ maxWidth: 540, paddingTop: 8 }}>
+      <div style={{ marginBottom: 32, display: 'flex', alignItems: 'center', gap: 16 }}>
+        <img src="/tessera-logo.png" alt="Tessera" style={{ height: 56, objectFit: 'contain' }} />
+        <div>
+          <div style={{ fontSize: 26, fontWeight: 700, color: '#2e7d32', lineHeight: 1.2 }}>Tessera</div>
+          <div style={{ fontSize: 13, color: '#888' }}>Version 1.0</div>
+        </div>
+      </div>
+      <Typography.Paragraph style={{ fontStyle: 'italic', color: '#555', borderLeft: '3px solid #e0e0e0', paddingLeft: 12, marginBottom: 24 }}>
+        "A small quadrilateral tablet of wood, bone, ivory, or the like, used for various purposes,
+        as a token, tally, ticket, label, etc."
+        <br />
+        <span style={{ fontSize: 12, color: '#999' }}>— Oxford English Dictionary</span>
+      </Typography.Paragraph>
+      <Typography.Text type="secondary">Created by Xavier Barton</Typography.Text>
+    </div>
+  )
+}
+
 export default function AdminPage() {
   return (
     <div>
@@ -382,6 +400,7 @@ export default function AdminPage() {
           { key: 'users', label: 'Users', children: <UsersTab /> },
           { key: 'sample-types', label: 'Sample Types', children: <SampleTypesTab /> },
           { key: 'options', label: 'Dropdown Options', children: <OptionsTab /> },
+          { key: 'about', label: 'About', children: <AboutTab /> },
         ]}
       />
     </div>

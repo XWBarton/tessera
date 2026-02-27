@@ -13,6 +13,7 @@ class Site(Base):
     habitat_type: Mapped[str] = mapped_column(String(100), nullable=True)
     lat: Mapped[float] = mapped_column(Float, nullable=True)
     lon: Mapped[float] = mapped_column(Float, nullable=True)
+    precision: Mapped[str] = mapped_column(String(50), nullable=True)
     notes: Mapped[str] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
 

@@ -15,7 +15,6 @@ class SpecimenSpeciesBase(BaseModel):
     life_stage: Optional[str] = None
     sex: Optional[str] = None
     confidence: str = "Unknown"
-    is_primary: bool = False
 
     @model_validator(mode="after")
     def check_species_or_free_text(self):
@@ -37,7 +36,6 @@ class SpecimenSpeciesRead(BaseModel):
     life_stage: Optional[str] = None
     sex: Optional[str] = None
     confidence: str
-    is_primary: bool
     created_at: datetime
     species: Optional[SpeciesRead] = None
 
@@ -48,6 +46,7 @@ class SpecimenSpeciesRead(BaseModel):
 class SpecimenBase(BaseModel):
     project_id: int
     collection_date: Optional[date] = None
+    collection_date_end: Optional[date] = None
     collector_id: Optional[int] = None
     collector_name: Optional[str] = None
     site_id: Optional[int] = None
@@ -63,11 +62,15 @@ class SpecimenBase(BaseModel):
 
 
 class SpecimenCreate(SpecimenBase):
+    specimen_code: Optional[str] = None  # admin only: custom code override
     species_associations: List[SpecimenSpeciesCreate] = []
 
 
 class SpecimenUpdate(BaseModel):
+    specimen_code: Optional[str] = None  # admin only: rename code
+    project_id: Optional[int] = None  # admin only: move to different project
     collection_date: Optional[date] = None
+    collection_date_end: Optional[date] = None
     collector_id: Optional[int] = None
     collector_name: Optional[str] = None
     site_id: Optional[int] = None
@@ -81,6 +84,30 @@ class SpecimenUpdate(BaseModel):
     storage_location: Optional[str] = None
     notes: Optional[str] = None
     species_associations: Optional[List[SpecimenSpeciesCreate]] = None
+
+
+class SpecimenBulkImportRow(BaseModel):
+    specimen_code: str
+    project_code: str
+    collection_date: Optional[str] = None
+    collection_date_end: Optional[str] = None
+    collector_name: Optional[str] = None
+    site_name: Optional[str] = None
+    sample_type_name: Optional[str] = None
+    quantity_value: Optional[float] = None
+    quantity_unit: Optional[str] = None
+    storage_location: Optional[str] = None
+    notes: Optional[str] = None
+    species: Optional[str] = None  # semicolon-separated free-text species names
+
+
+class SpecimenBulkImportRequest(BaseModel):
+    rows: List[SpecimenBulkImportRow]
+
+
+class SpecimenBulkImportResult(BaseModel):
+    created: int
+    errors: List[str]
 
 
 class SpecimenRead(SpecimenBase):

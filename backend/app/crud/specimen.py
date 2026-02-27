@@ -105,7 +105,7 @@ def _create_specimen_attempt(
         .scalar()
     )
     next_seq = (max_seq or 0) + 1
-    code = f"{project.code}-{str(next_seq).zfill(3)}"
+    code = specimen_data.specimen_code or f"{project.code}-{str(next_seq).zfill(3)}"
 
     # Initialise quantity_remaining = quantity_value when first set
     qty_remaining = specimen_data.quantity_remaining
@@ -117,6 +117,7 @@ def _create_specimen_attempt(
         project_id=specimen_data.project_id,
         sequence_number=next_seq,
         collection_date=specimen_data.collection_date,
+        collection_date_end=specimen_data.collection_date_end,
         collector_id=specimen_data.collector_id,
         collector_name=specimen_data.collector_name,
         entered_by_id=entered_by_id,
@@ -143,7 +144,6 @@ def _create_specimen_attempt(
             life_stage=assoc.life_stage,
             sex=assoc.sex,
             confidence=assoc.confidence,
-            is_primary=assoc.is_primary,
         )
         db.add(db_assoc)
 
@@ -159,6 +159,8 @@ def create_specimen(
         return _create_specimen_attempt(db, specimen_data, project, entered_by_id)
     except IntegrityError:
         db.rollback()
+        if specimen_data.specimen_code:
+            raise  # custom code is a duplicate — let the router surface the error
         return _create_specimen_attempt(db, specimen_data, project, entered_by_id)
 
 
@@ -195,7 +197,6 @@ def update_specimen(
                 life_stage=assoc.life_stage,
                 sex=assoc.sex,
                 confidence=assoc.confidence,
-                is_primary=assoc.is_primary,
             )
             db.add(db_assoc)
 

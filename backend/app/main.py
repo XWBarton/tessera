@@ -4,7 +4,7 @@ from sqlalchemy import text
 from .config import settings
 from .database import engine, SessionLocal, Base
 from .models import User, Project, Species, Site, SampleType, Specimen, SpecimenSpecies, TubeUsageLog, LookupOption
-from .routers import auth, users, projects, species, sites, sample_types, specimens, export, lookups
+from .routers import auth, users, projects, species, sites, sample_types, specimens, export, lookups, setup
 from .crud.user import get_user_by_username, create_user
 from .crud.sample_type import seed_sample_types
 from .crud.lookup_option import seed_lookup_options
@@ -33,6 +33,11 @@ def run_migrations():
             ("specimens", "quantity_value", "REAL", None),
             ("specimens", "quantity_unit", "TEXT", None),
             ("specimens", "quantity_remaining", "REAL", None),
+            ("specimens", "collection_date_end", "DATE", None),
+            ("users", "avatar_filename", "TEXT", None),
+            ("sites", "precision", "TEXT", None),
+            ("sample_types", "is_specimen", "INTEGER DEFAULT 0",
+             "UPDATE sample_types SET is_specimen = 1 WHERE name IN ('Voucher Specimens', 'Specimen')"),
         ]
         for migration in add_column_migrations:
             table, column, col_def = migration[0], migration[1], migration[2]
@@ -45,6 +50,34 @@ def run_migrations():
                     conn.execute(text(backfill))
                 conn.commit()
                 print(f"[tessera] Migration: added {table}.{column}")
+
+        # --- Rename/remove old default sample types ---
+        # Rename "Voucher Specimens" → "Specimen" if it still exists
+        old_voucher = conn.execute(
+            text("SELECT id FROM sample_types WHERE name = 'Voucher Specimens'")
+        ).fetchone()
+        if old_voucher:
+            conn.execute(text(
+                "UPDATE sample_types SET name = 'Specimen', is_specimen = 1 WHERE name = 'Voucher Specimens'"
+            ))
+            conn.commit()
+            print("[tessera] Migration: renamed 'Voucher Specimens' → 'Specimen'")
+
+        # Remove "Environmental" and "Other" if no specimens reference them
+        for old_name in ("Environmental", "Other"):
+            row = conn.execute(
+                text("SELECT id FROM sample_types WHERE name = :n"), {"n": old_name}
+            ).fetchone()
+            if row:
+                in_use = conn.execute(
+                    text("SELECT COUNT(*) FROM specimens WHERE sample_type_id = :sid"), {"sid": row[0]}
+                ).fetchone()[0]
+                if not in_use:
+                    conn.execute(
+                        text("DELETE FROM sample_types WHERE id = :sid"), {"sid": row[0]}
+                    )
+                    conn.commit()
+                    print(f"[tessera] Migration: removed default sample type '{old_name}'")
 
         # --- Make specimens.collector_id nullable (SQLite requires table recreation) ---
         col_info = {
@@ -124,6 +157,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(setup.router)
 app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(projects.router)

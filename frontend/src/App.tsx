@@ -2,8 +2,10 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext'
 import ProtectedRoute from './components/layout/ProtectedRoute'
 import AdminRoute from './components/layout/AdminRoute'
+import SetupGuard from './components/layout/SetupGuard'
 import AppShell from './components/layout/AppShell'
 import LoginPage from './pages/LoginPage'
+import SetupPage from './pages/SetupPage'
 import DashboardPage from './pages/DashboardPage'
 import SpecimensPage from './pages/SpecimensPage'
 import SpecimenFormPage from './pages/SpecimenFormPage'
@@ -16,11 +18,14 @@ import SpeciesPage from './pages/SpeciesPage'
 import TimelinePage from './pages/TimelinePage'
 import ExportPage from './pages/ExportPage'
 import AdminPage from './pages/AdminPage'
+import BulkImportPage from './pages/BulkImportPage'
 
 function App() {
   return (
     <AuthProvider>
+      <SetupGuard>
       <Routes>
+        <Route path="/setup" element={<SetupPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route
           path="/"
@@ -51,8 +56,17 @@ function App() {
               </AdminRoute>
             }
           />
+          <Route
+            path="import"
+            element={
+              <AdminRoute>
+                <BulkImportPage />
+              </AdminRoute>
+            }
+          />
         </Route>
       </Routes>
+      </SetupGuard>
     </AuthProvider>
   )
 }
