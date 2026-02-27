@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="tessera-logo.png" alt="Tessera" height="120" />
+</p>
+
 # Tessera
 
 > *A small quadrilateral tablet of wood, bone, ivory, or the like, used for various purposes, as a token, tally, ticket, label, etc.* — Oxford English Dictionary
@@ -169,6 +173,3 @@ npm run dev
 
 API docs are available at [http://localhost:8000/docs](http://localhost:8000/docs) when running the backend directly.
 
----
-
-## Created by Xavier Barton
