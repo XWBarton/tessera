@@ -291,37 +291,52 @@ export default function SpecimenDetailPage() {
     },
   ]
 
+  const nowrap = { whiteSpace: 'nowrap' as const }
   const usageColumns = [
-    { title: 'Date', dataIndex: 'date', key: 'date' },
+    { title: 'Date', dataIndex: 'date', key: 'date', width: 110, onCell: () => ({ style: nowrap }) },
     {
       title: 'Taken',
       key: 'taken',
+      width: 120,
+      onCell: () => ({ style: nowrap }),
       render: (_: unknown, r: TubeUsageLog) => `${r.quantity_taken} ${r.unit}`,
+    },
+    {
+      title: 'Purpose',
+      dataIndex: 'purpose',
+      key: 'purpose',
+      width: 160,
+      onCell: () => ({ style: nowrap }),
+      render: (v: string) => v || '—',
     },
     {
       title: 'Breakdown',
       key: 'breakdown',
+      width: 240,
       render: (_: unknown, r: TubeUsageLog) => {
         if (!r.breakdown || r.breakdown.length === 0) return '—'
         return (
-          <Space size={4} wrap>
+          <Space size={4} wrap={false} style={{ whiteSpace: 'nowrap' }}>
             {r.breakdown.map((item, i) => (
-              <Tag key={i}>{item.label}: {item.count}</Tag>
+              <Tag key={i} style={{ margin: 0 }}>{item.label}: {item.count}</Tag>
             ))}
           </Space>
         )
       },
     },
-    { title: 'Purpose', dataIndex: 'purpose', key: 'purpose', render: (v: string) => v || '—' },
     {
       title: 'By',
       key: 'by',
+      width: 130,
+      onCell: () => ({ style: nowrap }),
       render: (_: unknown, r: TubeUsageLog) => r.taken_by?.full_name || '—',
     },
     {
       title: 'Mol. Ref',
       dataIndex: 'molecular_ref',
       key: 'molecular_ref',
+      width: 110,
+      onCell: () => ({ style: nowrap }),
       render: (v: string) => v ? <Tag color="blue">{v}</Tag> : '—',
     },
     { title: 'Notes', dataIndex: 'notes', key: 'notes', ellipsis: true, render: (v: string) => v || '—' },
@@ -477,15 +492,24 @@ export default function SpecimenDetailPage() {
             {specimen.storage_location || '—'}
           </Descriptions.Item>
           <Descriptions.Item label="Species">
-            {specimen.species_associations.length === 0 ? '—' : (
-              <Space size={4} wrap>
-                {specimen.species_associations.map((a) => (
-                  <Tag key={a.id} color={CONFIDENCE_COLORS[a.confidence]}>
-                    <em>{a.species?.scientific_name || a.free_text_species}</em>
-                  </Tag>
-                ))}
-              </Space>
-            )}
+            {specimen.species_associations.length === 0 ? '—' : (() => {
+              const seen = new Set<string>()
+              const unique = specimen.species_associations.filter((a) => {
+                const name = a.species?.scientific_name || a.free_text_species || ''
+                if (!name || seen.has(name)) return false
+                seen.add(name)
+                return true
+              })
+              return (
+                <Space size={4} wrap>
+                  {unique.map((a) => (
+                    <Tag key={a.id} color={CONFIDENCE_COLORS[a.confidence]}>
+                      <em>{a.species?.scientific_name || a.free_text_species}</em>
+                    </Tag>
+                  ))}
+                </Space>
+              )
+            })()}
           </Descriptions.Item>
           <Descriptions.Item label="Notes" span={2}>
             {specimen.notes || '—'}
@@ -508,6 +532,7 @@ export default function SpecimenDetailPage() {
         columns={usageColumns}
         rowKey="id"
         pagination={false}
+        scroll={{ x: 'max-content' }}
         locale={{ emptyText: 'No usage recorded yet' }}
       />
 

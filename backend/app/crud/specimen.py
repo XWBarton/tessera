@@ -1,3 +1,4 @@
+import re
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
@@ -111,13 +112,34 @@ def get_specimen(db: Session, specimen_id: int) -> Optional[Specimen]:
 def _create_specimen_attempt(
     db: Session, specimen_data: SpecimenCreate, project: Project, entered_by_id: int
 ) -> Specimen:
-    max_seq = (
-        db.query(func.max(Specimen.sequence_number))
-        .filter(Specimen.project_id == project.id)
-        .scalar()
-    )
-    next_seq = (max_seq or 0) + 1
-    code = specimen_data.specimen_code or f"{project.code}-{str(next_seq).zfill(3)}"
+    if specimen_data.specimen_code:
+        code = specimen_data.specimen_code
+        # If the custom code matches the project format (e.g. XPG-000), parse
+        # the sequence number directly so the auto-counter stays consistent.
+        m = re.match(rf"^{re.escape(project.code)}-(\d+)$", code)
+        if m:
+            seq_number = int(m.group(1))
+        else:
+            # Non-matching format: use a unique negative value so it never
+            # interferes with the positive auto-generated sequence.
+            min_seq = (
+                db.query(func.min(Specimen.sequence_number))
+                .filter(Specimen.project_id == project.id)
+                .filter(Specimen.sequence_number < 0)
+                .scalar()
+            ) or 0
+            seq_number = min_seq - 1
+    else:
+        # Auto-generate: only consider non-negative sequence numbers so custom
+        # non-matching codes (stored as negatives) don't skew the counter.
+        max_seq = (
+            db.query(func.max(Specimen.sequence_number))
+            .filter(Specimen.project_id == project.id)
+            .filter(Specimen.sequence_number >= 0)
+            .scalar()
+        )
+        seq_number = (max_seq or 0) + 1
+        code = f"{project.code}-{str(seq_number).zfill(3)}"
 
     # Initialise quantity_remaining = quantity_value when first set
     qty_remaining = specimen_data.quantity_remaining
@@ -127,7 +149,7 @@ def _create_specimen_attempt(
     db_specimen = Specimen(
         specimen_code=code,
         project_id=specimen_data.project_id,
-        sequence_number=next_seq,
+        sequence_number=seq_number,
         collection_date=specimen_data.collection_date,
         collection_date_end=specimen_data.collection_date_end,
         collector_id=specimen_data.collector_id,
