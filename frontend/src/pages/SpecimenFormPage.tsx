@@ -71,7 +71,7 @@ export default function SpecimenFormPage() {
         collector_name: specimen.collector_name,
         collection_date_range_start: specimen.collection_date ? dayjs(specimen.collection_date) : undefined,
         collection_date_range_end: specimen.collection_date_end ? dayjs(specimen.collection_date_end) : undefined,
-        site_id: specimen.site_id,
+        site_ids: specimen.sites?.map(s => s.id) ?? [],
         sample_type_id: specimen.sample_type_id,
         quantity_value: specimen.quantity_value,
         quantity_unit: specimen.quantity_unit,
@@ -104,11 +104,14 @@ export default function SpecimenFormPage() {
     if (!siteId || !sites) return
     const site: Site | undefined = sites.find((s) => s.id === siteId)
     if (!site) return
-    form.setFieldsValue({
-      collection_lat: site.lat ?? form.getFieldValue('collection_lat'),
-      collection_lon: site.lon ?? form.getFieldValue('collection_lon'),
-      collection_location_text: site.description || site.name,
-    })
+    // Auto-fill coords/description from the first selected site if not already set
+    if (!form.getFieldValue('collection_lat') && site.lat) {
+      form.setFieldsValue({
+        collection_lat: site.lat,
+        collection_lon: site.lon,
+        collection_location_text: form.getFieldValue('collection_location_text') || site.description || site.name,
+      })
+    }
   }
 
   const onFinish = async (values: Record<string, unknown>) => {
@@ -139,7 +142,7 @@ export default function SpecimenFormPage() {
           collection_date_end: collectionDateEnd,
           collector_id: collectorId,
           collector_name: collectorName,
-          site_id: values.site_id as number | undefined,
+          site_ids: (values.site_ids as number[] | undefined) ?? [],
           sample_type_id: values.sample_type_id as number | undefined,
           quantity_value,
           quantity_unit,
@@ -161,7 +164,7 @@ export default function SpecimenFormPage() {
           collection_date_end: collectionDateEnd,
           collector_id: collectorId,
           collector_name: collectorName,
-          site_id: values.site_id as number | undefined,
+          site_ids: (values.site_ids as number[] | undefined) ?? [],
           sample_type_id: values.sample_type_id as number | undefined,
           quantity_value,
           quantity_unit,
@@ -328,15 +331,18 @@ export default function SpecimenFormPage() {
             )}
           </Row>
 
-          <Form.Item name="site_id" label="Collection Site">
+          <Form.Item name="site_ids" label="Collection Sites">
             <Select
-              placeholder="Select a site from the database (optional)"
+              mode="multiple"
+              placeholder="Select one or more sites (optional)"
               allowClear
               showSearch
               filterOption={(input, option) =>
                 (option?.label as string)?.toLowerCase().includes(input.toLowerCase())
               }
-              onChange={handleSiteChange}
+              onChange={(ids: number[]) => {
+                if (ids.length > 0) handleSiteChange(ids[0])
+              }}
               options={sites?.map((s) => ({
                 value: s.id,
                 label: s.habitat_type ? `${s.name} (${s.habitat_type})` : s.name,

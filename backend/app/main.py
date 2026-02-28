@@ -79,6 +79,23 @@ def run_migrations():
                     conn.commit()
                     print(f"[tessera] Migration: removed default sample type '{old_name}'")
 
+        # --- Create specimen_sites junction table and migrate existing site_id data ---
+        tables = {r[0] for r in conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'")).fetchall()}
+        if "specimen_sites" not in tables:
+            conn.execute(text("""
+                CREATE TABLE specimen_sites (
+                    specimen_id INTEGER NOT NULL REFERENCES specimens(id) ON DELETE CASCADE,
+                    site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+                    PRIMARY KEY (specimen_id, site_id)
+                )
+            """))
+            conn.execute(text("""
+                INSERT OR IGNORE INTO specimen_sites (specimen_id, site_id)
+                SELECT id, site_id FROM specimens WHERE site_id IS NOT NULL
+            """))
+            conn.commit()
+            print("[tessera] Migration: created specimen_sites junction table")
+
         # --- Make specimens.collector_id nullable (SQLite requires table recreation) ---
         col_info = {
             row[1]: row
@@ -188,3 +205,9 @@ def startup_event():
 @app.get("/health")
 def health():
     return {"status": "ok", "version": settings.APP_VERSION}
+
+
+@app.get("/config")
+def public_config():
+    """Public runtime config for the frontend — no auth required."""
+    return {"elementa_url": settings.ELEMENTA_URL}

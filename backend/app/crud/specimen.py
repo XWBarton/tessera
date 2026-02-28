@@ -27,6 +27,7 @@ def _build_base_query(
         joinedload(Specimen.project),
         joinedload(Specimen.collector),
         joinedload(Specimen.site),
+        joinedload(Specimen.sites),
         joinedload(Specimen.sample_type),
         joinedload(Specimen.species_associations).joinedload(SpecimenSpecies.species),
     )
@@ -101,6 +102,7 @@ def get_specimen(db: Session, specimen_id: int) -> Optional[Specimen]:
             joinedload(Specimen.project),
             joinedload(Specimen.collector),
             joinedload(Specimen.site),
+            joinedload(Specimen.sites),
             joinedload(Specimen.sample_type),
             joinedload(Specimen.species_associations).joinedload(SpecimenSpecies.species),
         )
@@ -146,6 +148,9 @@ def _create_specimen_attempt(
     if qty_remaining is None and specimen_data.quantity_value is not None:
         qty_remaining = specimen_data.quantity_value
 
+    site_objs = db.query(Site).filter(Site.id.in_(specimen_data.site_ids)).all() if specimen_data.site_ids else []
+    first_site_id = site_objs[0].id if site_objs else None
+
     db_specimen = Specimen(
         specimen_code=code,
         project_id=specimen_data.project_id,
@@ -155,7 +160,7 @@ def _create_specimen_attempt(
         collector_id=specimen_data.collector_id,
         collector_name=specimen_data.collector_name,
         entered_by_id=entered_by_id,
-        site_id=specimen_data.site_id,
+        site_id=first_site_id,
         sample_type_id=specimen_data.sample_type_id,
         quantity_value=specimen_data.quantity_value,
         quantity_unit=specimen_data.quantity_unit,
@@ -165,6 +170,7 @@ def _create_specimen_attempt(
         collection_location_text=specimen_data.collection_location_text,
         storage_location=specimen_data.storage_location,
         notes=specimen_data.notes,
+        sites=site_objs,
     )
     db.add(db_specimen)
     db.flush()
@@ -202,7 +208,7 @@ def update_specimen(
     db: Session, specimen: Specimen, specimen_update: SpecimenUpdate
 ) -> Specimen:
     update_data = specimen_update.model_dump(
-        exclude_unset=True, exclude={"species_associations"}
+        exclude_unset=True, exclude={"species_associations", "site_ids"}
     )
 
     # When quantity_value changes, preserve how much has been used so the
@@ -217,6 +223,11 @@ def update_specimen(
 
     for field, value in update_data.items():
         setattr(specimen, field, value)
+
+    if specimen_update.site_ids is not None:
+        site_objs = db.query(Site).filter(Site.id.in_(specimen_update.site_ids)).all()
+        specimen.sites = site_objs
+        specimen.site_id = site_objs[0].id if site_objs else None
 
     if specimen_update.species_associations is not None:
         for assoc in specimen.species_associations:

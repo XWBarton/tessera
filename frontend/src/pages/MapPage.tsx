@@ -46,7 +46,7 @@ export default function MapPage() {
   // Which precision levels are present (for legend)
   const presentPrecisions = useMemo(() => {
     const seen = new Set<string>()
-    specimens.forEach((s) => seen.add(s.site?.precision || 'GPS'))
+    specimens.forEach((s) => seen.add(s.sites?.[0]?.precision || 'GPS'))
     return Array.from(seen).sort((a, b) =>
       Object.keys(PRECISION_LABEL).indexOf(a) - Object.keys(PRECISION_LABEL).indexOf(b)
     )
@@ -68,7 +68,7 @@ export default function MapPage() {
           {specimens.map((s) => {
             const first = s.species_associations[0]
             const color = first ? CONFIDENCE_COLORS[first.confidence] || '#757575' : '#757575'
-            const precision = s.site?.precision || 'GPS'
+            const precision = s.sites?.[0]?.precision || 'GPS'
             const radiusM = PRECISION_RADIUS_M[precision]
             const pos: [number, number] = [s.collection_lat!, s.collection_lon!]
 
@@ -83,11 +83,11 @@ export default function MapPage() {
                 </em>
                 <br />
                 {s.collection_date}
-                {s.site && (
+                {s.sites?.length > 0 && (
                   <>
                     <br />
                     <span style={{ color: '#888', fontSize: 11 }}>
-                      {s.site.name}{precision !== 'GPS' ? ` (${precision}-level)` : ''}
+                      {s.sites.map(st => st.name).join(', ')}{precision !== 'GPS' ? ` (${precision}-level)` : ''}
                     </span>
                   </>
                 )}

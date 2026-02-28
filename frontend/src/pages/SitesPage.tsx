@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { Typography, Table, Button, Modal, Form, Input, InputNumber, Space, message, Popconfirm, Tag, Select } from 'antd'
+import { useNavigate } from 'react-router-dom'
+import { Typography, Table, Button, Modal, Form, Input, InputNumber, Space, message, Popconfirm, Tag, Select, Drawer, Spin } from 'antd'
 import { PlusOutlined, DeleteOutlined, EditOutlined } from '@ant-design/icons'
-import { useSites, useCreateSite, useUpdateSite, useDeleteSite } from '../hooks/useSites'
+import { useSites, useCreateSite, useUpdateSite, useDeleteSite, useSiteSpecimens } from '../hooks/useSites'
 import { useAuth } from '../context/AuthContext'
-import type { Site } from '../types'
+import type { Site, Specimen } from '../types'
 
 const PRECISION_OPTIONS = [
   { value: 'GPS', label: 'GPS — exact point' },
@@ -64,6 +65,67 @@ function SiteForm({ onFinish, loading, initialValues }: {
   )
 }
 
+function SiteSpecimensDrawer({ site, onClose }: { site: Site; onClose: () => void }) {
+  const navigate = useNavigate()
+  const { data: specimens, isLoading } = useSiteSpecimens(site.id)
+
+  const specimenColumns = [
+    {
+      title: 'Code',
+      dataIndex: 'specimen_code',
+      key: 'specimen_code',
+      render: (v: string, record: Specimen) => (
+        <Button type="link" style={{ padding: 0 }} onClick={() => { onClose(); navigate(`/specimens/${record.id}`) }}>
+          {v}
+        </Button>
+      ),
+    },
+    { title: 'Project', key: 'project', render: (_: unknown, r: Specimen) => r.project?.code ?? '—' },
+    { title: 'Date', dataIndex: 'collection_date', key: 'collection_date', render: (v: string) => v ?? '—' },
+    {
+      title: 'Species',
+      key: 'species',
+      render: (_: unknown, r: Specimen) => {
+        const first = r.species_associations[0]
+        return first ? <em style={{ fontSize: 12 }}>{first.species?.scientific_name || first.free_text_species}</em> : '—'
+      },
+    },
+    { title: 'Sample Type', key: 'sample_type', render: (_: unknown, r: Specimen) => r.sample_type?.name ?? '—' },
+  ]
+
+  return (
+    <Drawer
+      title={
+        <span>
+          {site.name}
+          {site.habitat_type && <Tag style={{ marginLeft: 8 }}>{site.habitat_type}</Tag>}
+          {site.precision && <Tag color={PRECISION_COLORS[site.precision] || 'default'} style={{ marginLeft: 4 }}>{site.precision}</Tag>}
+        </span>
+      }
+      open
+      onClose={onClose}
+      width={700}
+    >
+      {isLoading ? (
+        <Spin />
+      ) : (
+        <>
+          <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
+            {specimens?.length ?? 0} tube{specimens?.length !== 1 ? 's' : ''} collected at this site
+          </Typography.Text>
+          <Table
+            dataSource={specimens}
+            columns={specimenColumns}
+            rowKey="id"
+            size="small"
+            pagination={{ pageSize: 20, hideOnSinglePage: true }}
+          />
+        </>
+      )}
+    </Drawer>
+  )
+}
+
 export default function SitesPage() {
   const { user } = useAuth()
   const { data: sites, isLoading } = useSites()
@@ -71,6 +133,7 @@ export default function SitesPage() {
   const deleteSite = useDeleteSite()
   const [createOpen, setCreateOpen] = useState(false)
   const [editingSite, setEditingSite] = useState<Site | null>(null)
+  const [selectedSite, setSelectedSite] = useState<Site | null>(null)
   const updateSite = useUpdateSite(editingSite?.id ?? 0)
 
   const handleCreate = async (values: Record<string, unknown>) => {
@@ -95,7 +158,16 @@ export default function SitesPage() {
   }
 
   const columns = [
-    { title: 'Name', dataIndex: 'name', key: 'name' },
+    {
+      title: 'Name',
+      dataIndex: 'name',
+      key: 'name',
+      render: (v: string, record: Site) => (
+        <Button type="link" style={{ padding: 0, fontWeight: 500 }} onClick={() => setSelectedSite(record)}>
+          {v}
+        </Button>
+      ),
+    },
     {
       title: 'Precision',
       dataIndex: 'precision',
@@ -128,7 +200,7 @@ export default function SitesPage() {
       width: 100,
       render: (_: unknown, record: Site) => (
         <Space>
-          <Button icon={<EditOutlined />} size="small" onClick={() => setEditingSite(record)} />
+          <Button icon={<EditOutlined />} size="small" onClick={(e) => { e.stopPropagation(); setEditingSite(record) }} />
           <Popconfirm
             title="Delete this site?"
             onConfirm={() =>
@@ -138,7 +210,7 @@ export default function SitesPage() {
                 .catch(() => message.error('Failed to delete'))
             }
           >
-            <Button icon={<DeleteOutlined />} size="small" danger />
+            <Button icon={<DeleteOutlined />} size="small" danger onClick={(e) => e.stopPropagation()} />
           </Popconfirm>
         </Space>
       ),
@@ -155,9 +227,12 @@ export default function SitesPage() {
           </Button>
         )}
       </div>
+      <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
+        Click a site name to view associated tubes.
+      </Typography.Text>
       <Table dataSource={sites} columns={columns} rowKey="id" loading={isLoading} />
 
-      <Modal title="Add Site" open={createOpen} onCancel={() => setCreateOpen(false)} footer={null} width={520}>
+      <Modal title="Add Site" open={createOpen} onCancel={() => setCreateOpen(false)} footer={null} width={520} destroyOnClose>
         <SiteForm onFinish={handleCreate} loading={createSite.isPending} />
       </Modal>
 
@@ -177,6 +252,10 @@ export default function SitesPage() {
           />
         )}
       </Modal>
+
+      {selectedSite && (
+        <SiteSpecimensDrawer site={selectedSite} onClose={() => setSelectedSite(null)} />
+      )}
     </div>
   )
 }

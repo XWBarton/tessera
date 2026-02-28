@@ -61,7 +61,7 @@ export interface Specimen {
   collector_id?: number
   collector_name?: string
   entered_by_id: number
-  site_id?: number
+  site_ids?: number[]
   sample_type_id?: number
   quantity_value?: number
   quantity_unit?: string
@@ -76,7 +76,7 @@ export interface Specimen {
   project?: Project
   collector?: User
   entered_by?: User
-  site?: Site
+  sites: Site[]
   sample_type?: SampleType
   species_associations: SpecimenSpecies[]
 }
@@ -109,7 +109,7 @@ export interface SpecimenCreate {
   collection_date_end?: string
   collector_id?: number
   collector_name?: string
-  site_id?: number
+  site_ids?: number[]
   sample_type_id?: number
   quantity_value?: number
   quantity_unit?: string
@@ -128,7 +128,7 @@ export interface SpecimenUpdate {
   collection_date_end?: string
   collector_id?: number
   collector_name?: string
-  site_id?: number
+  site_ids?: number[]
   sample_type_id?: number
   quantity_value?: number
   quantity_unit?: string

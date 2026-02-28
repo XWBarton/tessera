@@ -1,8 +1,16 @@
 from datetime import datetime, timezone
-from sqlalchemy import Date, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Column, Date, DateTime, Float, ForeignKey, Integer, String, Table, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from ..database import Base
 from typing import Optional
+
+# Many-to-many junction table for specimen ↔ sites
+specimen_sites_table = Table(
+    "specimen_sites",
+    Base.metadata,
+    Column("specimen_id", Integer, ForeignKey("specimens.id", ondelete="CASCADE"), primary_key=True),
+    Column("site_id", Integer, ForeignKey("sites.id", ondelete="CASCADE"), primary_key=True),
+)
 
 
 class Specimen(Base):
@@ -40,7 +48,8 @@ class Specimen(Base):
     project = relationship("Project", back_populates="specimens")
     collector = relationship("User", back_populates="specimens_collected", foreign_keys=[collector_id])
     entered_by = relationship("User", back_populates="specimens_entered", foreign_keys=[entered_by_id])
-    site = relationship("Site", back_populates="specimens")
+    site = relationship("Site", back_populates="specimens", foreign_keys=[site_id])
+    sites = relationship("Site", secondary=specimen_sites_table, lazy="joined")
     sample_type = relationship("SampleType", back_populates="specimens")
     usage_log = relationship("TubeUsageLog", back_populates="specimen", cascade="all, delete-orphan")
     species_associations = relationship(

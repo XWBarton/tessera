@@ -16,6 +16,11 @@ class Settings(BaseSettings):
 
     APP_VERSION: str = "1.0.0"
 
+    # Optional URL of a companion Elementa LIMS instance.
+    # When set, Mol. Ref values in usage logs will be rendered as clickable links.
+    # Example: ELEMENTA_URL=http://your-server:8001
+    ELEMENTA_URL: str = ""
+
     class Config:
         env_file = ".env"
         extra = "ignore"

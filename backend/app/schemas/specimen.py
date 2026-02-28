@@ -49,7 +49,7 @@ class SpecimenBase(BaseModel):
     collection_date_end: Optional[date] = None
     collector_id: Optional[int] = None
     collector_name: Optional[str] = None
-    site_id: Optional[int] = None
+    site_ids: List[int] = []
     sample_type_id: Optional[int] = None
     quantity_value: Optional[float] = None
     quantity_unit: Optional[str] = None
@@ -73,7 +73,7 @@ class SpecimenUpdate(BaseModel):
     collection_date_end: Optional[date] = None
     collector_id: Optional[int] = None
     collector_name: Optional[str] = None
-    site_id: Optional[int] = None
+    site_ids: Optional[List[int]] = None
     sample_type_id: Optional[int] = None
     quantity_value: Optional[float] = None
     quantity_unit: Optional[str] = None
@@ -126,7 +126,7 @@ class SpecimenDetail(SpecimenRead):
     project: Optional[ProjectRead] = None
     collector: Optional[UserRead] = None
     entered_by: Optional[UserRead] = None
-    site: Optional[SiteRead] = None
+    sites: List[SiteRead] = []
     sample_type: Optional[SampleTypeRead] = None
     species_associations: List[SpecimenSpeciesRead] = []
 

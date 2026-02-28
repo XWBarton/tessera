@@ -372,10 +372,11 @@ def bulk_import_specimens(
                     continue
 
                 site_id = None
+                site_obj = None
                 if row.site_name:
-                    site = db.query(Site).filter(Site.name == row.site_name).first()
-                    if site:
-                        site_id = site.id
+                    site_obj = db.query(Site).filter(Site.name == row.site_name).first()
+                    if site_obj:
+                        site_id = site_obj.id
 
                 sample_type_id = None
                 if row.sample_type_name:
@@ -421,6 +422,7 @@ def bulk_import_specimens(
                     quantity_remaining=qty_remaining,
                     storage_location=row.storage_location or None,
                     notes=row.notes or None,
+                    sites=[site_obj] if site_obj else [],
                 )
                 db.add(db_specimen)
                 db.flush()

@@ -1,9 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from ..dependencies import get_db, get_current_user, require_admin
 from ..crud.site import get_site, search_sites, get_all_sites, create_site, update_site, delete_site, get_site_by_name
 from ..schemas.site import SiteRead, SiteCreate, SiteUpdate
+from ..schemas.specimen import SpecimenDetail
 from ..models.user import User
+from ..models.specimen import Specimen
+from ..models.specimen_species import SpecimenSpecies
 from typing import List, Optional
 
 router = APIRouter(prefix="/sites", tags=["sites"])
@@ -56,6 +59,29 @@ def update_existing_site(
     if not site:
         raise HTTPException(status_code=404, detail="Site not found")
     return update_site(db, site, site_update)
+
+
+@router.get("/{site_id}/specimens", response_model=List[SpecimenDetail])
+def list_specimens_for_site(
+    site_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    site = get_site(db, site_id)
+    if not site:
+        raise HTTPException(status_code=404, detail="Site not found")
+    return (
+        db.query(Specimen)
+        .filter(Specimen.sites.any(id=site_id))
+        .options(
+            joinedload(Specimen.project),
+            joinedload(Specimen.collector),
+            joinedload(Specimen.sites),
+            joinedload(Specimen.sample_type),
+            joinedload(Specimen.species_associations).joinedload(SpecimenSpecies.species),
+        )
+        .all()
+    )
 
 
 @router.delete("/{site_id}")

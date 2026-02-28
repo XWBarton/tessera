@@ -27,6 +27,7 @@ import { Dropdown } from 'antd'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import { useSpecimen, useDeleteSpecimen, useUpdateSpecimen } from '../hooks/useSpecimens'
+import { useConfig } from '../hooks/useConfig'
 import { useTubeUsage, useRecordUsage, useDeleteUsageEntry } from '../hooks/useTubeUsage'
 import { downloadLabel, ZPL_TEMPLATE_OPTIONS, getPhotos, uploadPhoto, deletePhoto, getPhotoBlob } from '../api/specimens'
 import type { ZplTemplate } from '../api/specimens'
@@ -106,6 +107,7 @@ export default function SpecimenDetailPage() {
   const { user } = useAuth()
   const specimenId = Number(id)
   const { data: specimen, isLoading } = useSpecimen(specimenId)
+  const { data: appConfig } = useConfig()
   const { data: usageLog } = useTubeUsage(specimenId)
   const deleteSpecimen = useDeleteSpecimen()
   const recordUsage = useRecordUsage(specimenId)
@@ -332,12 +334,28 @@ export default function SpecimenDetailPage() {
       render: (_: unknown, r: TubeUsageLog) => r.taken_by?.full_name || '—',
     },
     {
-      title: 'Mol. Ref',
+      title: 'Elementa Ref',
       dataIndex: 'molecular_ref',
       key: 'molecular_ref',
-      width: 110,
+      width: 120,
       onCell: () => ({ style: nowrap }),
-      render: (v: string) => v ? <Tag color="blue">{v}</Tag> : '—',
+      render: (v: string) => {
+        const base = appConfig?.elementa_url
+        const code = encodeURIComponent(specimen.specimen_code)
+        if (!v) {
+          return base
+            ? <a href={`${base}/extraction-runs/new?specimen=${code}`} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: '#aaa' }}>+ New extraction</a>
+            : '—'
+        }
+        if (base) {
+          return (
+            <a href={`${base}/extraction-runs/${v}?specimen=${code}`} target="_blank" rel="noreferrer">
+              <Tag color="blue" style={{ cursor: 'pointer' }}>{v}</Tag>
+            </a>
+          )
+        }
+        return <Tag color="blue">{v}</Tag>
+      },
     },
     { title: 'Notes', dataIndex: 'notes', key: 'notes', ellipsis: true, render: (v: string) => v || '—' },
     ...(user?.is_admin ? [{
@@ -470,14 +488,16 @@ export default function SpecimenDetailPage() {
           <Descriptions.Item label="Entered by">
             {specimen.entered_by?.full_name || '—'}
           </Descriptions.Item>
-          <Descriptions.Item label="Site">
-            {specimen.site ? (
-              <span>
-                <strong>{specimen.site.name}</strong>
-                {specimen.site.habitat_type && (
-                  <Tag style={{ marginLeft: 8 }}>{specimen.site.habitat_type}</Tag>
-                )}
-              </span>
+          <Descriptions.Item label={specimen.sites?.length > 1 ? 'Sites' : 'Site'}>
+            {specimen.sites?.length > 0 ? (
+              <Space size={4} wrap>
+                {specimen.sites.map(s => (
+                  <span key={s.id}>
+                    <strong>{s.name}</strong>
+                    {s.habitat_type && <Tag style={{ marginLeft: 4 }}>{s.habitat_type}</Tag>}
+                  </span>
+                ))}
+              </Space>
             ) : '—'}
           </Descriptions.Item>
           <Descriptions.Item label="Location">
@@ -669,7 +689,7 @@ export default function SpecimenDetailPage() {
             <Space.Compact style={{ width: '100%' }}>
               <Form.Item name="quantity_taken" label="Quantity Taken" rules={[{ required: true }]}
                 style={{ width: '60%', marginRight: 8 }}>
-                <InputNumber style={{ width: '100%' }} min={0.001} step={1} placeholder="e.g. 3" />
+                <InputNumber style={{ width: '100%' }} min={0} step={1} placeholder="0 for non-destructive" />
               </Form.Item>
               <Form.Item name="unit" label="Unit" rules={[{ required: true }]} style={{ width: '40%' }}>
                 <Input placeholder="specimens / mL / mg" />
@@ -686,8 +706,8 @@ export default function SpecimenDetailPage() {
           <Form.Item name="purpose" label="Purpose">
             <Input placeholder="e.g. DNA extraction, morphology voucher" />
           </Form.Item>
-          <Form.Item name="molecular_ref" label="Tessera Molecular Ref">
-            <Input placeholder="Future link to Tessera Molecular job ID" />
+          <Form.Item name="molecular_ref" label="Elementa Ref">
+            <Input placeholder="e.g. EXT-001" />
           </Form.Item>
           <Form.Item name="notes" label="Notes">
             <Input.TextArea rows={2} />

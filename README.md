@@ -71,6 +71,10 @@ FIRST_ADMIN_USERNAME=admin
 FIRST_ADMIN_PASSWORD=changeme123
 FIRST_ADMIN_EMAIL=admin@example.com
 FIRST_ADMIN_FULL_NAME=Administrator
+
+# Optional: URL of a companion Elementa LIMS instance.
+# When set, Mol. Ref values in usage logs become clickable links into Elementa.
+ELEMENTA_URL=http://your-server:8001
 ```
 
 `SECRET_KEY` should be a long random string in production. Generate one with:
