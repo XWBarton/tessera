@@ -65,14 +65,23 @@ export default function SpecimenTable({
       key: 'species',
       render: (_: unknown, r: Specimen) => {
         if (r.species_associations.length === 0) return '—'
+        const seen = new Set<string>()
+        const unique = r.species_associations.filter((a) => {
+          const name = a.species?.scientific_name || a.free_text_species || ''
+          if (!name || seen.has(name)) return false
+          seen.add(name)
+          return true
+        })
         return (
-          <Space size={4} wrap>
-            {r.species_associations.map((a) => (
-              <Tag key={a.id} color={CONFIDENCE_COLORS[a.confidence]}>
-                <em>{a.species?.scientific_name || a.free_text_species}</em>
-              </Tag>
-            ))}
-          </Space>
+          <div style={{ overflowX: 'auto', whiteSpace: 'nowrap', maxWidth: 240 }}>
+            <Space size={4} wrap={false}>
+              {unique.map((a) => (
+                <Tag key={a.id} color={CONFIDENCE_COLORS[a.confidence]} style={{ margin: 0 }}>
+                  <em>{a.species?.scientific_name || a.free_text_species}</em>
+                </Tag>
+              ))}
+            </Space>
+          </div>
         )
       },
     },
