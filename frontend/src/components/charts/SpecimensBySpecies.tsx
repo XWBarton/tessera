@@ -6,27 +6,29 @@ interface Props {
 }
 
 const COLORS = [
-  '#1b5e20',
-  '#2e7d32',
-  '#388e3c',
-  '#558b2f',
-  '#33691e',
-  '#43a047',
-  '#00695c',
-  '#004d40',
-  '#66bb6a',
-  '#81c784',
+  '#6366f1',
+  '#06b6d4',
+  '#f59e0b',
+  '#ec4899',
+  '#10b981',
+  '#8b5cf6',
+  '#f97316',
+  '#3b82f6',
+  '#14b8a6',
+  '#ef4444',
 ]
 
 export default function SpecimensBySpecies({ specimens }: Props) {
   const counts: Record<string, number> = {}
   specimens.forEach((s) => {
-    const primary = s.species_associations.find((a) => a.is_primary)
-    const key =
-      primary?.species?.scientific_name ||
-      primary?.free_text_species ||
-      'Unknown'
-    counts[key] = (counts[key] || 0) + 1
+    if (s.species_associations.length === 0) {
+      counts['Unknown'] = (counts['Unknown'] || 0) + 1
+    } else {
+      s.species_associations.forEach((a) => {
+        const key = a.species?.scientific_name || a.free_text_species || 'Unknown'
+        counts[key] = (counts[key] || 0) + 1
+      })
+    }
   })
   const data = Object.entries(counts)
     .map(([name, value]) => ({ name, value }))

@@ -4,19 +4,24 @@ from ..schemas.sample_type import SampleTypeCreate, SampleTypeUpdate
 from typing import Optional, List
 
 DEFAULT_SAMPLE_TYPES = [
-    {"name": "Voucher Specimens", "default_unit": "specimens"},
-    {"name": "Blood",             "default_unit": "mL"},
-    {"name": "Tissue",            "default_unit": "mg"},
-    {"name": "Swab",              "default_unit": "swabs"},
-    {"name": "Environmental",     "default_unit": "mL"},
-    {"name": "Other",             "default_unit": None},
+    {"name": "Specimen", "default_unit": "specimens", "is_specimen": True},
+    {"name": "Blood",    "default_unit": "mL",        "is_specimen": False},
+    {"name": "Water",    "default_unit": "mL",        "is_specimen": False},
+    {"name": "Swab",     "default_unit": "swabs",     "is_specimen": False},
+    {"name": "Tissue",   "default_unit": "mg",        "is_specimen": False},
 ]
 
 
 def seed_sample_types(db: Session):
     for st in DEFAULT_SAMPLE_TYPES:
-        if not db.query(SampleType).filter(SampleType.name == st["name"]).first():
-            db.add(SampleType(name=st["name"], default_unit=st["default_unit"], is_default=True))
+        existing = db.query(SampleType).filter(SampleType.name == st["name"]).first()
+        if not existing:
+            db.add(SampleType(
+                name=st["name"],
+                default_unit=st["default_unit"],
+                is_default=True,
+                is_specimen=st["is_specimen"],
+            ))
     db.commit()
 
 
@@ -33,7 +38,7 @@ def get_sample_type_by_name(db: Session, name: str) -> Optional[SampleType]:
 
 
 def create_sample_type(db: Session, data: SampleTypeCreate) -> SampleType:
-    db_st = SampleType(name=data.name, default_unit=data.default_unit, is_default=False)
+    db_st = SampleType(name=data.name, default_unit=data.default_unit, is_specimen=data.is_specimen, is_default=False)
     db.add(db_st)
     db.commit()
     db.refresh(db_st)

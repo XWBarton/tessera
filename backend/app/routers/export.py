@@ -27,6 +27,7 @@ def _specimens_to_csv(specimens) -> str:
         "specimen_code",
         "project_code",
         "collection_date",
+        "collection_date_end",
         "collector",
         "entered_by_username",
         "entered_by_full_name",
@@ -44,7 +45,6 @@ def _specimens_to_csv(specimens) -> str:
             f"species_{i}_sex",
             f"species_{i}_count",
             f"species_{i}_confidence",
-            f"species_{i}_is_primary",
         ]
 
     fieldnames = base_fields + species_fields
@@ -57,6 +57,7 @@ def _specimens_to_csv(specimens) -> str:
             "specimen_code": s.specimen_code,
             "project_code": s.project.code if s.project else "",
             "collection_date": str(s.collection_date) if s.collection_date else "",
+            "collection_date_end": str(s.collection_date_end) if s.collection_date_end else "",
             "collector": s.collector.full_name if s.collector else (s.collector_name or "Unknown"),
             "entered_by_username": s.entered_by.username if s.entered_by else "",
             "entered_by_full_name": s.entered_by.full_name if s.entered_by else "",
@@ -77,7 +78,6 @@ def _specimens_to_csv(specimens) -> str:
             row[f"species_{i}_sex"] = assoc.sex or ""
             row[f"species_{i}_count"] = assoc.specimen_count if assoc.specimen_count is not None else ""
             row[f"species_{i}_confidence"] = assoc.confidence
-            row[f"species_{i}_is_primary"] = assoc.is_primary
         writer.writerow(row)
 
     return output.getvalue()

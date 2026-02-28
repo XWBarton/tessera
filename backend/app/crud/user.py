@@ -63,6 +63,13 @@ def delete_user(db: Session, user: User) -> User:
     return user
 
 
-def hard_delete_user(db: Session, user: User) -> None:
-    db.delete(user)
+def hard_delete_user(db: Session, user: User, reassign_to_id: int) -> None:
+    from ..models.project import Project
+    # Reassign any projects this user created to the deleting admin
+    db.query(Project).filter(Project.created_by == user.id).update(
+        {"created_by": reassign_to_id}
+    )
+    # Deactivate rather than remove the row so tube records still show this
+    # user's name as collector / entered-by
+    user.is_active = False
     db.commit()

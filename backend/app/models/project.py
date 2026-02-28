@@ -15,4 +15,4 @@ class Project(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     created_by_user = relationship("User", back_populates="projects_created")
-    specimens = relationship("Specimen", back_populates="project")
+    specimens = relationship("Specimen", back_populates="project", cascade="all, delete-orphan")

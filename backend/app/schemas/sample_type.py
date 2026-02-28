@@ -6,6 +6,7 @@ from typing import Optional
 class SampleTypeBase(BaseModel):
     name: str
     default_unit: Optional[str] = None
+    is_specimen: bool = False
 
 
 class SampleTypeCreate(SampleTypeBase):
@@ -15,6 +16,7 @@ class SampleTypeCreate(SampleTypeBase):
 class SampleTypeUpdate(BaseModel):
     name: Optional[str] = None
     default_unit: Optional[str] = None
+    is_specimen: Optional[bool] = None
 
 
 class SampleTypeRead(SampleTypeBase):

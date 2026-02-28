@@ -46,8 +46,13 @@ export default function SpecimenTable({
     },
     {
       title: 'Date',
-      dataIndex: 'collection_date',
       key: 'collection_date',
+      render: (_: unknown, r: Specimen) => {
+        if (!r.collection_date) return '—'
+        if (r.collection_date_end && r.collection_date_end !== r.collection_date)
+          return `${r.collection_date} – ${r.collection_date_end}`
+        return r.collection_date
+      },
     },
     {
       title: 'Collector',
@@ -56,17 +61,18 @@ export default function SpecimenTable({
         r.collector?.full_name || r.collector_name || <em style={{ color: '#bbb' }}>Unknown</em>,
     },
     {
-      title: 'Primary Species',
+      title: 'Species',
       key: 'species',
       render: (_: unknown, r: Specimen) => {
-        const primary = r.species_associations.find((a) => a.is_primary)
-        if (!primary) return '—'
-        const name =
-          primary.species?.scientific_name || primary.free_text_species || '—'
+        if (r.species_associations.length === 0) return '—'
         return (
-          <Tag color={CONFIDENCE_COLORS[primary.confidence]}>
-            <em>{name}</em>
-          </Tag>
+          <Space size={4} wrap>
+            {r.species_associations.map((a) => (
+              <Tag key={a.id} color={CONFIDENCE_COLORS[a.confidence]}>
+                <em>{a.species?.scientific_name || a.free_text_species}</em>
+              </Tag>
+            ))}
+          </Space>
         )
       },
     },

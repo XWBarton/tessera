@@ -7,3 +7,4 @@ from .specimen import Specimen
 from .specimen_species import SpecimenSpecies
 from .tube_usage_log import TubeUsageLog
 from .lookup_option import LookupOption
+from .specimen_photo import SpecimenPhoto

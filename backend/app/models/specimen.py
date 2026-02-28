@@ -16,6 +16,7 @@ class Specimen(Base):
     project_id: Mapped[int] = mapped_column(Integer, ForeignKey("projects.id"), nullable=False)
     sequence_number: Mapped[int] = mapped_column(Integer, nullable=False)
     collection_date: Mapped[datetime] = mapped_column(Date, nullable=True)
+    collection_date_end: Mapped[datetime] = mapped_column(Date, nullable=True)
     collector_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=True)
     collector_name: Mapped[str] = mapped_column(String(200), nullable=True)
     entered_by_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
@@ -45,3 +46,4 @@ class Specimen(Base):
     species_associations = relationship(
         "SpecimenSpecies", back_populates="specimen", cascade="all, delete-orphan"
     )
+    photos = relationship("SpecimenPhoto", back_populates="specimen", cascade="all, delete-orphan")

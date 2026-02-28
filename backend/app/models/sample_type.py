@@ -11,6 +11,7 @@ class SampleType(Base):
     name: Mapped[str] = mapped_column(String(100), unique=True, index=True, nullable=False)
     default_unit: Mapped[str] = mapped_column(String(50), nullable=True)  # e.g. "specimens", "mL", "mg"
     is_default: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)  # pre-seeded, protected from delete
+    is_specimen: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)  # True = voucher/specimen (auto-count), False = sample (manual quantity)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     specimens = relationship("Specimen", back_populates="sample_type")

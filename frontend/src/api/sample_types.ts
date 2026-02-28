@@ -11,6 +11,11 @@ export const createSampleType = async (data: SampleTypeCreate): Promise<SampleTy
   return res
 }
 
+export const updateSampleType = async (id: number, data: Partial<SampleTypeCreate>): Promise<SampleType> => {
+  const { data: res } = await apiClient.put<SampleType>(`/sample-types/${id}`, data)
+  return res
+}
+
 export const deleteSampleType = async (id: number): Promise<void> => {
   await apiClient.delete(`/sample-types/${id}`)
 }

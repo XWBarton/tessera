@@ -1,12 +1,14 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Button, Space, Typography, message } from 'antd'
+import { Button, Space, Typography, message, Dropdown } from 'antd'
+import type { MenuProps } from 'antd'
 import { PlusOutlined } from '@ant-design/icons'
 import { useSpecimens } from '../hooks/useSpecimens'
 import SpecimenTable from '../components/specimens/SpecimenTable'
 import SpecimenFilters from '../components/specimens/SpecimenFilters'
 import type { SpecimenFilters as Filters } from '../types'
-import { bulkDownloadLabels } from '../api/specimens'
+import { bulkDownloadLabels, ZPL_TEMPLATE_OPTIONS } from '../api/specimens'
+import type { ZplTemplate } from '../api/specimens'
 
 export default function SpecimensPage() {
   const navigate = useNavigate()
@@ -43,15 +45,25 @@ export default function SpecimensPage() {
         <Space>
           {selectedIds.length > 0 && (
             <>
-              <Button
-                onClick={() =>
-                  bulkDownloadLabels(selectedIds, 'zpl').then(() =>
-                    message.success('ZPL labels downloaded')
-                  )
-                }
+              <Dropdown
+                menu={{
+                  items: ZPL_TEMPLATE_OPTIONS.map((t) => ({
+                    key: t.value,
+                    label: (
+                      <span>
+                        <strong>{t.label}</strong>
+                        <span style={{ color: '#888', marginLeft: 8, fontSize: 12 }}>{t.description}</span>
+                      </span>
+                    ),
+                    onClick: () =>
+                      bulkDownloadLabels(selectedIds, 'zpl', t.value as ZplTemplate).then(() =>
+                        message.success(`${t.label} ZPL labels downloaded`)
+                      ),
+                  })) satisfies MenuProps['items'],
+                }}
               >
-                ZPL Labels ({selectedIds.length})
-              </Button>
+                <Button>ZPL Labels ({selectedIds.length}) ▾</Button>
+              </Dropdown>
               <Button
                 onClick={() =>
                   bulkDownloadLabels(selectedIds, 'csv').then(() =>

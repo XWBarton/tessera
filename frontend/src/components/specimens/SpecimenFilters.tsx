@@ -22,17 +22,14 @@ export default function SpecimenFilters({ onFiltersChange }: Props) {
   const { data: species } = useSpecies()
 
   const handleFinish = (values: Record<string, unknown>) => {
+    const dateRange = values.date_range as [dayjs.Dayjs, dayjs.Dayjs] | null
     onFiltersChange({
       project_id: values.project_id as number | undefined,
       collector_id: values.collector_id as number | undefined,
       species_id: values.species_id as number | undefined,
       confidence: values.confidence as string | undefined,
-      date_from: values.date_from
-        ? dayjs(values.date_from as string).format('YYYY-MM-DD')
-        : undefined,
-      date_to: values.date_to
-        ? dayjs(values.date_to as string).format('YYYY-MM-DD')
-        : undefined,
+      date_from: dateRange?.[0] ? dateRange[0].format('YYYY-MM-DD') : undefined,
+      date_to: dateRange?.[1] ? dateRange[1].format('YYYY-MM-DD') : undefined,
       search: (values.search as string) || undefined,
     })
   }
@@ -115,14 +112,9 @@ export default function SpecimenFilters({ onFiltersChange }: Props) {
             />
           </Form.Item>
         </Col>
-        <Col xs={12} sm={6} md={3}>
-          <Form.Item name="date_from" style={{ marginBottom: 0 }}>
-            <DatePicker placeholder="From" style={{ width: '100%' }} />
-          </Form.Item>
-        </Col>
-        <Col xs={12} sm={6} md={3}>
-          <Form.Item name="date_to" style={{ marginBottom: 0 }}>
-            <DatePicker placeholder="To" style={{ width: '100%' }} />
+        <Col xs={24} sm={12} md={6}>
+          <Form.Item name="date_range" style={{ marginBottom: 0 }}>
+            <DatePicker.RangePicker style={{ width: '100%' }} placeholder={['Collection from', 'Collection to']} />
           </Form.Item>
         </Col>
         <Col xs={24} sm={12} md={6}>
