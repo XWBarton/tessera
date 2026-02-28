@@ -377,6 +377,7 @@ function IntegrationsTab() {
   const qc = useQueryClient()
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle')
   const [urlInput, setUrlInput] = useState<string | null>(null)
+  const [tokenVisible, setTokenVisible] = useState(false)
 
   const { data: settings, isLoading } = useQuery({
     queryKey: ['app-settings'],
@@ -384,6 +385,23 @@ function IntegrationsTab() {
       const { data } = await apiClient.get<Record<string, string>>('/admin/settings/')
       return data
     },
+  })
+
+  const { data: tokenData, refetch: refetchToken } = useQuery({
+    queryKey: ['api-token'],
+    queryFn: async () => {
+      const { data } = await apiClient.get<{ token: string | null }>('/admin/settings/api-token')
+      return data
+    },
+  })
+
+  const regenerateToken = useMutation({
+    mutationFn: async () => {
+      const { data } = await apiClient.post<{ token: string }>('/admin/settings/api-token/regenerate')
+      return data
+    },
+    onSuccess: () => { refetchToken(); setTokenVisible(true) },
+    onError: () => message.error('Failed to generate token'),
   })
 
   const currentUrl = urlInput ?? settings?.elementa_url ?? ''
@@ -416,6 +434,7 @@ function IntegrationsTab() {
   }
 
   const isDirty = urlInput !== null && urlInput !== (settings?.elementa_url ?? '')
+  const token = tokenData?.token ?? null
 
   return (
     <div style={{ maxWidth: 560 }}>
@@ -454,28 +473,49 @@ function IntegrationsTab() {
       </Space.Compact>
 
       {testStatus === 'ok' && (
-        <Alert
-          type="success"
-          icon={<CheckCircleOutlined />}
-          showIcon
-          message="Connected — Elementa is reachable"
-          style={{ marginTop: 8 }}
-        />
+        <Alert type="success" icon={<CheckCircleOutlined />} showIcon message="Connected — Elementa is reachable" style={{ marginTop: 8 }} />
       )}
       {testStatus === 'fail' && (
-        <Alert
-          type="error"
-          icon={<CloseCircleOutlined />}
-          showIcon
-          message="Could not reach Elementa at that URL"
-          description="Check the URL and ensure Elementa is running and accessible from this browser."
-          style={{ marginTop: 8 }}
-        />
+        <Alert type="error" icon={<CloseCircleOutlined />} showIcon message="Could not reach Elementa at that URL" description="Check the URL and ensure Elementa is running and accessible from this browser." style={{ marginTop: 8 }} />
       )}
       {!isDirty && settings?.elementa_url && testStatus === 'idle' && (
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
           Saved URL: <code>{settings.elementa_url}</code>
         </Typography.Text>
+      )}
+
+      <Typography.Title level={5} style={{ marginTop: 32, marginBottom: 4 }}>API Token</Typography.Title>
+      <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
+        Paste this token into Elementa so it can authenticate to Tessera — no username or password needed.
+      </Typography.Paragraph>
+      {token ? (
+        <Space direction="vertical" style={{ width: '100%' }}>
+          <Input.Password
+            value={token}
+            readOnly
+            visibilityToggle={{ visible: tokenVisible, onVisibleChange: setTokenVisible }}
+          />
+          <Space>
+            <Button
+              onClick={() => { navigator.clipboard.writeText(token); message.success('Copied') }}
+            >
+              Copy
+            </Button>
+            <Popconfirm
+              title="Regenerate API token?"
+              description="Any existing integrations using the current token will stop working."
+              okText="Regenerate"
+              okButtonProps={{ danger: true }}
+              onConfirm={() => regenerateToken.mutate()}
+            >
+              <Button danger loading={regenerateToken.isPending}>Regenerate</Button>
+            </Popconfirm>
+          </Space>
+        </Space>
+      ) : (
+        <Button type="primary" loading={regenerateToken.isPending} onClick={() => regenerateToken.mutate()}>
+          Generate API Token
+        </Button>
       )}
     </div>
   )

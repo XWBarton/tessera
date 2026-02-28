@@ -42,6 +42,37 @@ def set_setting(
     return {"key": key, "value": body.value}
 
 
+@router.get("/api-token")
+def get_api_token(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """Return the stored API token, or null if not yet generated."""
+    row = db.execute(text("SELECT value FROM app_settings WHERE key = 'api_token'")).fetchone()
+    return {"token": row[0] if row else None}
+
+
+@router.post("/api-token/regenerate")
+def regenerate_api_token(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """Generate a new long-lived API token (invalidates any previous token)."""
+    from ..security import create_access_token
+    from datetime import timedelta
+
+    token = create_access_token(
+        data={"sub": current_user.id},
+        expires_delta=timedelta(days=3650),
+    )
+    db.execute(
+        text("INSERT INTO app_settings (key, value) VALUES ('api_token', :v) ON CONFLICT(key) DO UPDATE SET value = excluded.value"),
+        {"v": token},
+    )
+    db.commit()
+    return {"token": token}
+
+
 @router.get("/test-connection")
 def test_connection(
     url: str,
