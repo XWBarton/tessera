@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Card,
   Descriptions,
@@ -28,7 +28,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import { useSpecimen, useDeleteSpecimen, useUpdateSpecimen } from '../hooks/useSpecimens'
 import { useConfig } from '../hooks/useConfig'
-import { useTubeUsage, useRecordUsage, useDeleteUsageEntry } from '../hooks/useTubeUsage'
+import { useTubeUsage, useRecordUsage, useDeleteUsageEntry, useSetUsageRef } from '../hooks/useTubeUsage'
 import { downloadLabel, ZPL_TEMPLATE_OPTIONS, getPhotos, uploadPhoto, deletePhoto, getPhotoBlob } from '../api/specimens'
 import type { ZplTemplate } from '../api/specimens'
 import { useAuth } from '../context/AuthContext'
@@ -104,6 +104,7 @@ function assocLabel(a: SpecimenSpecies): string {
 export default function SpecimenDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const { user } = useAuth()
   const specimenId = Number(id)
   const { data: specimen, isLoading } = useSpecimen(specimenId)
@@ -112,7 +113,41 @@ export default function SpecimenDetailPage() {
   const deleteSpecimen = useDeleteSpecimen()
   const recordUsage = useRecordUsage(specimenId)
   const deleteUsage = useDeleteUsageEntry(specimenId)
+  const setUsageRef = useSetUsageRef(specimenId)
   const queryClient = useQueryClient()
+
+  // Handle postMessage callback from Elementa tab after extraction run creation
+  useEffect(() => {
+    const handler = (event: MessageEvent) => {
+      if (event.data?.type !== 'ELEMENTA_RUN_CREATED') return
+      const { run_id, usage_id } = event.data
+      setUsageRef.mutate(
+        { entryId: Number(usage_id), molecular_ref: String(run_id) },
+        { onSuccess: () => message.success(`Elementa run ${run_id} linked`) }
+      )
+    }
+    window.addEventListener('message', handler)
+    return () => window.removeEventListener('message', handler)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Fallback: handle redirect-based callback (when window.opener unavailable)
+  useEffect(() => {
+    const linkedRun = searchParams.get('linked_run')
+    const usageId = searchParams.get('usage_id')
+    if (!linkedRun || !usageId) return
+    setUsageRef.mutate(
+      { entryId: Number(usageId), molecular_ref: linkedRun },
+      {
+        onSuccess: () => {
+          message.success(`Elementa run ${linkedRun} linked`)
+          setSearchParams({}, { replace: true })
+        },
+        onError: () => setSearchParams({}, { replace: true }),
+      }
+    )
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   const updateSpecimen = useUpdateSpecimen(specimenId)
   const [usageModalOpen, setUsageModalOpen] = useState(false)
   const [usageForm] = Form.useForm()
@@ -339,22 +374,19 @@ export default function SpecimenDetailPage() {
       key: 'molecular_ref',
       width: 120,
       onCell: () => ({ style: nowrap }),
-      render: (v: string) => {
-        const base = appConfig?.elementa_url
+      render: (v: string, record: TubeUsageLog) => {
+        const raw = appConfig?.elementa_url?.trim()
+        const base = raw && (raw.startsWith('http://') || raw.startsWith('https://')) ? raw.replace(/\/$/, '') : null
         const code = encodeURIComponent(specimen.specimen_code)
+        const returnTo = encodeURIComponent(`${window.location.origin}/specimens/${specimenId}`)
         if (!v) {
           return base
-            ? <a href={`${base}/extraction-runs/new?specimen=${code}`} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: '#aaa' }}>+ New extraction</a>
+            ? <Button type="link" style={{ padding: 0, fontSize: 12, color: '#aaa', height: 'auto' }} onClick={() => window.open(`${base}/extraction-runs/new?specimen=${code}&usage_id=${record.id}&return_to=${returnTo}`, '_blank')}>+ New extraction</Button>
             : '—'
         }
-        if (base) {
-          return (
-            <a href={`${base}/extraction-runs/${v}?specimen=${code}`} target="_blank" rel="noreferrer">
-              <Tag color="blue" style={{ cursor: 'pointer' }}>{v}</Tag>
-            </a>
-          )
-        }
-        return <Tag color="blue">{v}</Tag>
+        return base
+          ? <Tag color="blue" style={{ cursor: 'pointer' }} onClick={() => window.open(`${base}/extraction-runs/${v}?specimen=${code}`, '_blank')}>{v}</Tag>
+          : <Tag color="blue">{v}</Tag>
       },
     },
     { title: 'Notes', dataIndex: 'notes', key: 'notes', ellipsis: true, render: (v: string) => v || '—' },

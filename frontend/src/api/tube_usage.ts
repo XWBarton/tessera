@@ -14,3 +14,8 @@ export const recordUsage = async (specimenId: number, data: TubeUsageLogCreate):
 export const deleteUsageEntry = async (specimenId: number, entryId: number): Promise<void> => {
   await apiClient.delete(`/specimens/${specimenId}/usage/${entryId}`)
 }
+
+export const setUsageRef = async (specimenId: number, entryId: number, molecular_ref: string): Promise<TubeUsageLog> => {
+  const { data } = await apiClient.patch<TubeUsageLog>(`/specimens/${specimenId}/usage/${entryId}/ref`, { molecular_ref })
+  return data
+}

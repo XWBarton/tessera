@@ -12,5 +12,5 @@ export const useConfig = () =>
       const { data } = await client.get<AppConfig>('/config')
       return data
     },
-    staleTime: Infinity, // config doesn't change at runtime
+    staleTime: 60 * 1000,
   })

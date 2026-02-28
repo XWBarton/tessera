@@ -22,6 +22,11 @@ from ..schemas.specimen import (
     SpecimenBulkImportRequest, SpecimenBulkImportResult,
 )
 from ..schemas.tube_usage_log import TubeUsageLogCreate, TubeUsageLogRead
+from pydantic import BaseModel
+
+
+class UsageRefUpdate(BaseModel):
+    molecular_ref: str
 from ..schemas.specimen_photo import SpecimenPhotoRead
 from ..models.tube_usage_log import TubeUsageLog
 from ..models.specimen_photo import SpecimenPhoto
@@ -325,6 +330,26 @@ def record_usage(
     if not specimen:
         raise HTTPException(status_code=404, detail="Specimen not found")
     return create_usage_event(db, specimen, usage, taken_by_id=current_user.id)
+
+
+@router.patch("/{specimen_id}/usage/{entry_id}/ref", response_model=TubeUsageLogRead)
+def set_usage_ref(
+    specimen_id: int,
+    entry_id: int,
+    body: UsageRefUpdate,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    entry = db.query(TubeUsageLog).filter(
+        TubeUsageLog.id == entry_id,
+        TubeUsageLog.specimen_id == specimen_id,
+    ).first()
+    if not entry:
+        raise HTTPException(status_code=404, detail="Usage entry not found")
+    entry.molecular_ref = body.molecular_ref
+    db.commit()
+    db.refresh(entry)
+    return entry
 
 
 @router.delete("/{specimen_id}/usage/{entry_id}")

@@ -4,7 +4,7 @@ from sqlalchemy import text
 from .config import settings
 from .database import engine, SessionLocal, Base
 from .models import User, Project, Species, Site, SampleType, Specimen, SpecimenSpecies, TubeUsageLog, LookupOption
-from .routers import auth, users, projects, species, sites, sample_types, specimens, export, lookups, setup
+from .routers import auth, users, projects, species, sites, sample_types, specimens, export, lookups, setup, app_settings
 from .crud.user import get_user_by_username, create_user
 from .crud.sample_type import seed_sample_types
 from .crud.lookup_option import seed_lookup_options
@@ -79,8 +79,21 @@ def run_migrations():
                     conn.commit()
                     print(f"[tessera] Migration: removed default sample type '{old_name}'")
 
-        # --- Create specimen_sites junction table and migrate existing site_id data ---
+        # --- Create app_settings key-value table and specimen_sites junction table ---
         tables = {r[0] for r in conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'")).fetchall()}
+
+        if "app_settings" not in tables:
+            conn.execute(text("""
+                CREATE TABLE app_settings (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL DEFAULT ''
+                )
+            """))
+            conn.commit()
+            print("[tessera] Migration: created app_settings table")
+            tables.add("app_settings")
+
+        # --- Create specimen_sites junction table and migrate existing site_id data ---
         if "specimen_sites" not in tables:
             conn.execute(text("""
                 CREATE TABLE specimen_sites (
@@ -187,6 +200,7 @@ app.include_router(sample_types.router)
 app.include_router(specimens.router)
 app.include_router(export.router)
 app.include_router(lookups.router)
+app.include_router(app_settings.router)
 
 
 @app.on_event("startup")
@@ -210,4 +224,12 @@ def health():
 @app.get("/config")
 def public_config():
     """Public runtime config for the frontend — no auth required."""
-    return {"elementa_url": settings.ELEMENTA_URL}
+    db = SessionLocal()
+    try:
+        row = db.execute(text("SELECT value FROM app_settings WHERE key = 'elementa_url'")).fetchone()
+        elementa_url = (row[0] if row and row[0] else None) or settings.ELEMENTA_URL
+    except Exception:
+        elementa_url = settings.ELEMENTA_URL
+    finally:
+        db.close()
+    return {"elementa_url": elementa_url}

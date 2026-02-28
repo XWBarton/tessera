@@ -14,13 +14,16 @@ import {
   message,
   Tag,
   Popconfirm,
+  Alert,
 } from 'antd'
-import { PlusOutlined, DeleteOutlined } from '@ant-design/icons'
+import { PlusOutlined, DeleteOutlined, CheckCircleOutlined, CloseCircleOutlined, LinkOutlined } from '@ant-design/icons'
 import { useUsers, useCreateUser, useUpdateUser } from '../hooks/useUsers'
 import { useSampleTypes, useCreateSampleType, useUpdateSampleType, useDeleteSampleType } from '../hooks/useSampleTypes'
 import type { User, SampleType } from '../types'
 import { useAuth } from '../context/AuthContext'
 import { useLookupOptions, useAddLookupOption, useDeleteLookupOption } from '../hooks/useLookups'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import apiClient from '../api/client'
 
 function UsersTab() {
   const { user: currentUser } = useAuth()
@@ -370,6 +373,114 @@ function OptionsTab() {
   )
 }
 
+function IntegrationsTab() {
+  const qc = useQueryClient()
+  const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'ok' | 'fail'>('idle')
+  const [urlInput, setUrlInput] = useState<string | null>(null)
+
+  const { data: settings, isLoading } = useQuery({
+    queryKey: ['app-settings'],
+    queryFn: async () => {
+      const { data } = await apiClient.get<Record<string, string>>('/admin/settings/')
+      return data
+    },
+  })
+
+  const currentUrl = urlInput ?? settings?.elementa_url ?? ''
+
+  const saveSetting = useMutation({
+    mutationFn: async (value: string) => {
+      await apiClient.put('/admin/settings/elementa_url', { value })
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['app-settings'] })
+      qc.invalidateQueries({ queryKey: ['app-config'] })
+      message.success('Saved')
+      setUrlInput(null)
+    },
+    onError: () => message.error('Failed to save'),
+  })
+
+  const testConnection = async () => {
+    const url = currentUrl.trim()
+    if (!url) return
+    setTestStatus('testing')
+    try {
+      const { data } = await apiClient.get<{ ok: boolean }>('/admin/settings/test-connection', {
+        params: { url },
+      })
+      setTestStatus(data.ok ? 'ok' : 'fail')
+    } catch {
+      setTestStatus('fail')
+    }
+  }
+
+  const isDirty = urlInput !== null && urlInput !== (settings?.elementa_url ?? '')
+
+  return (
+    <div style={{ maxWidth: 560 }}>
+      <Typography.Paragraph type="secondary" style={{ marginBottom: 24 }}>
+        Connect Tessera to an <strong>Elementa</strong> instance. Once configured, molecular
+        references on tube records will link directly into Elementa and you can open new extractions
+        pre-populated with the correct tube.
+      </Typography.Paragraph>
+
+      <Typography.Title level={5} style={{ marginBottom: 8 }}>Elementa URL</Typography.Title>
+      <Space.Compact style={{ width: '100%', marginBottom: 8 }}>
+        <Input
+          prefix={<LinkOutlined style={{ color: '#bbb' }} />}
+          placeholder="e.g. http://192.168.1.10:8080"
+          value={currentUrl}
+          onChange={(e) => { setUrlInput(e.target.value); setTestStatus('idle') }}
+          disabled={isLoading}
+          allowClear
+          onClear={() => { setUrlInput(''); setTestStatus('idle') }}
+        />
+        <Button
+          onClick={testConnection}
+          loading={testStatus === 'testing'}
+          disabled={!currentUrl.trim()}
+        >
+          Test
+        </Button>
+        <Button
+          type="primary"
+          onClick={() => saveSetting.mutate(currentUrl.trim())}
+          loading={saveSetting.isPending}
+          disabled={!isDirty}
+        >
+          Save
+        </Button>
+      </Space.Compact>
+
+      {testStatus === 'ok' && (
+        <Alert
+          type="success"
+          icon={<CheckCircleOutlined />}
+          showIcon
+          message="Connected — Elementa is reachable"
+          style={{ marginTop: 8 }}
+        />
+      )}
+      {testStatus === 'fail' && (
+        <Alert
+          type="error"
+          icon={<CloseCircleOutlined />}
+          showIcon
+          message="Could not reach Elementa at that URL"
+          description="Check the URL and ensure Elementa is running and accessible from this browser."
+          style={{ marginTop: 8 }}
+        />
+      )}
+      {!isDirty && settings?.elementa_url && testStatus === 'idle' && (
+        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+          Saved URL: <code>{settings.elementa_url}</code>
+        </Typography.Text>
+      )}
+    </div>
+  )
+}
+
 function AboutTab() {
   return (
     <div style={{ maxWidth: 540, paddingTop: 8 }}>
@@ -400,6 +511,7 @@ export default function AdminPage() {
           { key: 'users', label: 'Users', children: <UsersTab /> },
           { key: 'sample-types', label: 'Sample Types', children: <SampleTypesTab /> },
           { key: 'options', label: 'Dropdown Options', children: <OptionsTab /> },
+          { key: 'integrations', label: 'Integrations', children: <IntegrationsTab /> },
           { key: 'about', label: 'About', children: <AboutTab /> },
         ]}
       />
