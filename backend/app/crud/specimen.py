@@ -16,6 +16,8 @@ def _build_base_query(
     collector_id=None,
     species_id=None,
     confidence=None,
+    life_stage=None,
+    sex=None,
     date_from=None,
     date_to=None,
     search=None,
@@ -39,6 +41,14 @@ def _build_base_query(
         query = query.join(Specimen.species_associations).filter(
             SpecimenSpecies.confidence == confidence
         )
+    if life_stage:
+        query = query.join(Specimen.species_associations).filter(
+            SpecimenSpecies.life_stage == life_stage
+        )
+    if sex:
+        query = query.join(Specimen.species_associations).filter(
+            SpecimenSpecies.sex == sex
+        )
     if date_from:
         query = query.filter(Specimen.collection_date >= date_from)
     if date_to:
@@ -58,6 +68,8 @@ def get_specimens(
     collector_id=None,
     species_id=None,
     confidence=None,
+    life_stage=None,
+    sex=None,
     date_from=None,
     date_to=None,
     search=None,
@@ -67,7 +79,7 @@ def get_specimens(
     limit: int = 50,
 ) -> Tuple[List[Specimen], int]:
     query = _build_base_query(
-        db, project_id, collector_id, species_id, confidence, date_from, date_to, search
+        db, project_id, collector_id, species_id, confidence, life_stage, sex, date_from, date_to, search
     )
     total = query.count()
 

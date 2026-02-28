@@ -126,8 +126,11 @@ def run_migrations():
 def seed_admin():
     db = SessionLocal()
     try:
-        existing = get_user_by_username(db, settings.FIRST_ADMIN_USERNAME)
-        if not existing:
+        # Only seed the default admin on a brand-new database (no users at all).
+        # If users exist, setup has already been completed and we must not
+        # recreate the default account, which would re-trigger the setup wizard.
+        user_count = db.query(User).count()
+        if user_count == 0:
             user = UserCreate(
                 username=settings.FIRST_ADMIN_USERNAME,
                 full_name=settings.FIRST_ADMIN_FULL_NAME,
@@ -136,9 +139,9 @@ def seed_admin():
                 is_admin=True,
             )
             create_user(db, user)
-            print(f"[tessera] Created admin user: {settings.FIRST_ADMIN_USERNAME}")
+            print(f"[tessera] Created default admin user: {settings.FIRST_ADMIN_USERNAME}")
         else:
-            print(f"[tessera] Admin user already exists: {settings.FIRST_ADMIN_USERNAME}")
+            print(f"[tessera] Users exist, skipping admin seed")
     finally:
         db.close()
 

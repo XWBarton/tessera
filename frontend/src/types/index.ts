@@ -241,6 +241,8 @@ export interface SpecimenFilters {
   collector_id?: number
   species_id?: number
   confidence?: string
+  life_stage?: string
+  sex?: string
   date_from?: string
   date_to?: string
   search?: string

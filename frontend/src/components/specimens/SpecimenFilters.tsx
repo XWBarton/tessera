@@ -3,6 +3,7 @@ import { SearchOutlined, ClearOutlined } from '@ant-design/icons'
 import { useProjects } from '../../hooks/useProjects'
 import { useUsers } from '../../hooks/useUsers'
 import { useSpecies } from '../../hooks/useSpecies'
+import { useLookupOptions } from '../../hooks/useLookups'
 import type { SpecimenFilters } from '../../types'
 import dayjs from 'dayjs'
 
@@ -20,6 +21,8 @@ export default function SpecimenFilters({ onFiltersChange }: Props) {
   const { data: projects } = useProjects()
   const { data: users } = useUsers()
   const { data: species } = useSpecies()
+  const { data: lifeStageOpts } = useLookupOptions('life_stage')
+  const { data: sexOpts } = useLookupOptions('sex')
 
   const handleFinish = (values: Record<string, unknown>) => {
     const dateRange = values.date_range as [dayjs.Dayjs, dayjs.Dayjs] | null
@@ -28,6 +31,8 @@ export default function SpecimenFilters({ onFiltersChange }: Props) {
       collector_id: values.collector_id as number | undefined,
       species_id: values.species_id as number | undefined,
       confidence: values.confidence as string | undefined,
+      life_stage: values.life_stage as string | undefined,
+      sex: values.sex as string | undefined,
       date_from: dateRange?.[0] ? dateRange[0].format('YYYY-MM-DD') : undefined,
       date_to: dateRange?.[1] ? dateRange[1].format('YYYY-MM-DD') : undefined,
       search: (values.search as string) || undefined,
@@ -41,6 +46,8 @@ export default function SpecimenFilters({ onFiltersChange }: Props) {
       collector_id: undefined,
       species_id: undefined,
       confidence: undefined,
+      life_stage: undefined,
+      sex: undefined,
       date_from: undefined,
       date_to: undefined,
       search: undefined,
@@ -109,6 +116,24 @@ export default function SpecimenFilters({ onFiltersChange }: Props) {
               placeholder="Confidence"
               allowClear
               options={CONFIDENCE_OPTIONS}
+            />
+          </Form.Item>
+        </Col>
+        <Col xs={12} sm={6} md={3}>
+          <Form.Item name="life_stage" style={{ marginBottom: 0 }}>
+            <Select
+              placeholder="Life Stage"
+              allowClear
+              options={lifeStageOpts?.map((o) => ({ value: o.value, label: o.value }))}
+            />
+          </Form.Item>
+        </Col>
+        <Col xs={12} sm={6} md={3}>
+          <Form.Item name="sex" style={{ marginBottom: 0 }}>
+            <Select
+              placeholder="Sex"
+              allowClear
+              options={sexOpts?.map((o) => ({ value: o.value, label: o.value }))}
             />
           </Form.Item>
         </Col>
