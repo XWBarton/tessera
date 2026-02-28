@@ -8,6 +8,8 @@
 
 Tessera is a laboratory specimen tracking system for managing biological collections. It tracks tubes and specimens from field collection through storage, with support for species associations, collection sites, quantity management, and label printing.
 
+> **Work in Progress** — Tessera has not yet been formally deployed or validated in a laboratory environment. Use at your own risk. Always back up your data regularly using the Export page before updates or changes.
+
 ---
 
 ## Features
