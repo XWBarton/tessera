@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Form, Input, Button, Card, Typography, message } from 'antd'
 import { UserOutlined, LockOutlined } from '@ant-design/icons'
 import { useAuth } from '../context/AuthContext'
@@ -10,17 +10,19 @@ const { Text } = Typography
 export default function LoginPage() {
   const { user, login: authLogin } = useAuth()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const [form] = Form.useForm()
+  const redirect = searchParams.get('redirect') || '/dashboard'
 
   useEffect(() => {
-    if (user) navigate('/dashboard')
-  }, [user, navigate])
+    if (user) navigate(redirect, { replace: true })
+  }, [user, navigate, redirect])
 
   const onFinish = async (values: { username: string; password: string }) => {
     try {
       const token = await login(values.username, values.password)
       await authLogin(token.access_token)
-      navigate('/dashboard')
+      navigate(redirect, { replace: true })
     } catch {
       message.error('Invalid username or password')
     }
