@@ -46,6 +46,30 @@ def create_usage_event(
     return entry
 
 
+def update_usage_event(
+    db: Session, specimen: Specimen, entry: TubeUsageLog, data: TubeUsageLogCreate
+) -> TubeUsageLog:
+    # Adjust quantity_remaining by the delta between old and new quantity
+    if specimen.quantity_remaining is not None:
+        delta = data.quantity_taken - entry.quantity_taken
+        specimen.quantity_remaining = max(0.0, specimen.quantity_remaining - delta)
+
+    breakdown_json = (
+        json.dumps([item.model_dump() for item in data.breakdown])
+        if data.breakdown
+        else None
+    )
+    entry.date = data.date
+    entry.quantity_taken = data.quantity_taken
+    entry.unit = data.unit
+    entry.purpose = data.purpose
+    entry.breakdown = breakdown_json
+    entry.notes = data.notes
+    db.commit()
+    db.refresh(entry)
+    return entry
+
+
 def delete_usage_event(db: Session, specimen: Specimen, entry: TubeUsageLog):
     # Restore quantity_remaining
     if specimen.quantity_remaining is not None:

@@ -19,6 +19,7 @@ import TimelinePage from './pages/TimelinePage'
 import ExportPage from './pages/ExportPage'
 import AdminPage from './pages/AdminPage'
 import BulkImportPage from './pages/BulkImportPage'
+import FindSpecimenPage from './pages/FindSpecimenPage'
 
 function App() {
   return (
@@ -39,6 +40,7 @@ function App() {
           <Route path="dashboard" element={<DashboardPage />} />
           <Route path="specimens" element={<SpecimensPage />} />
           <Route path="specimens/new" element={<SpecimenFormPage />} />
+          <Route path="specimens/find" element={<FindSpecimenPage />} />
           <Route path="specimens/:id" element={<SpecimenDetailPage />} />
           <Route path="specimens/:id/edit" element={<SpecimenFormPage />} />
           <Route path="projects" element={<ProjectsPage />} />

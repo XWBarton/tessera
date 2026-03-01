@@ -28,7 +28,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import dayjs from 'dayjs'
 import { useSpecimen, useDeleteSpecimen, useUpdateSpecimen } from '../hooks/useSpecimens'
 import { useConfig } from '../hooks/useConfig'
-import { useTubeUsage, useRecordUsage, useDeleteUsageEntry, useSetUsageRef } from '../hooks/useTubeUsage'
+import { useTubeUsage, useRecordUsage, useUpdateUsageEntry, useDeleteUsageEntry, useSetUsageRef } from '../hooks/useTubeUsage'
 import { downloadLabel, ZPL_TEMPLATE_OPTIONS, getPhotos, uploadPhoto, deletePhoto, getPhotoBlob } from '../api/specimens'
 import type { ZplTemplate } from '../api/specimens'
 import { useAuth } from '../context/AuthContext'
@@ -112,6 +112,7 @@ export default function SpecimenDetailPage() {
   const { data: usageLog } = useTubeUsage(specimenId)
   const deleteSpecimen = useDeleteSpecimen()
   const recordUsage = useRecordUsage(specimenId)
+  const updateUsage = useUpdateUsageEntry(specimenId)
   const deleteUsage = useDeleteUsageEntry(specimenId)
   const setUsageRef = useSetUsageRef(specimenId)
   const queryClient = useQueryClient()
@@ -148,11 +149,33 @@ export default function SpecimenDetailPage() {
     )
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
   const updateSpecimen = useUpdateSpecimen(specimenId)
   const [usageModalOpen, setUsageModalOpen] = useState(false)
   const [usageForm] = Form.useForm()
+  const [editUsageForm] = Form.useForm()
   // breakdown counts keyed by association index
   const [breakdownCounts, setBreakdownCounts] = useState<Record<number, number>>({})
+
+  // Auto-open Record Usage when arriving from Elementa with ?elementa_ref=...
+  const elementaRef = searchParams.get('elementa_ref')
+  const elementaRunType = searchParams.get('run_type')
+  useEffect(() => {
+    if (!elementaRef || !specimen) return
+    setBreakdownCounts({})
+    usageForm.setFieldsValue({
+      date: dayjs(),
+      unit: specimen.quantity_unit || '',
+      quantity_taken: undefined,
+      molecular_ref: elementaRef,
+      purpose: elementaRunType ?? undefined,
+    })
+    setUsageModalOpen(true)
+    setSearchParams({}, { replace: true })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [elementaRef, specimen])
+  const [editUsageEntry, setEditUsageEntry] = useState<TubeUsageLog | null>(null)
+  const [editBreakdownCounts, setEditBreakdownCounts] = useState<Record<number, number>>({})
   const [codeModalOpen, setCodeModalOpen] = useState(false)
   const [newCode, setNewCode] = useState('')
 
@@ -268,6 +291,59 @@ export default function SpecimenDetailPage() {
       setBreakdownCounts({})
     } catch {
       message.error('Failed to record usage')
+    }
+  }
+
+  const openEditUsageModal = (entry: TubeUsageLog) => {
+    const counts: Record<number, number> = {}
+    if (entry.breakdown) {
+      countedAssociations.forEach((a, i) => {
+        const item = entry.breakdown!.find((b) => b.label === assocLabel(a))
+        if (item) counts[i] = item.count
+      })
+    }
+    setEditBreakdownCounts(counts)
+    editUsageForm.setFieldsValue({
+      date: dayjs(entry.date),
+      unit: entry.unit,
+      quantity_taken: entry.quantity_taken,
+      purpose: entry.purpose,
+      notes: entry.notes,
+    })
+    setEditUsageEntry(entry)
+  }
+
+  const handleEditUsage = async (values: Record<string, unknown>) => {
+    if (!editUsageEntry) return
+    try {
+      const editBreakdownTotal = Object.values(editBreakdownCounts).reduce((s, n) => s + (n || 0), 0)
+      const breakdown = hasAssociations
+        ? countedAssociations
+            .map((a, i) => ({ label: assocLabel(a), count: editBreakdownCounts[i] || 0 }))
+            .filter((item) => item.count > 0)
+        : undefined
+      const quantity_taken = hasAssociations ? editBreakdownTotal : (values.quantity_taken as number)
+      if (hasAssociations && quantity_taken === 0) {
+        message.warning('Enter at least one count')
+        return
+      }
+      await updateUsage.mutateAsync({
+        entryId: editUsageEntry.id,
+        data: {
+          date: dayjs(values.date as string).format('YYYY-MM-DD'),
+          quantity_taken,
+          unit: values.unit as string,
+          purpose: values.purpose as string | undefined,
+          breakdown,
+          notes: values.notes as string | undefined,
+        },
+      })
+      message.success('Usage updated')
+      setEditUsageEntry(null)
+      editUsageForm.resetFields()
+      setEditBreakdownCounts({})
+    } catch {
+      message.error('Failed to update usage')
     }
   }
 
@@ -394,16 +470,19 @@ export default function SpecimenDetailPage() {
       title: '',
       key: 'actions',
       render: (_: unknown, r: TubeUsageLog) => (
-        <Popconfirm
-          title="Delete this usage entry? This will restore the quantity."
-          onConfirm={() =>
-            deleteUsage.mutateAsync(r.id)
-              .then(() => message.success('Entry deleted'))
-              .catch(() => message.error('Failed to delete entry'))
-          }
-        >
-          <Button icon={<DeleteOutlined />} size="small" danger />
-        </Popconfirm>
+        <Space>
+          <Button icon={<EditOutlined />} size="small" onClick={() => openEditUsageModal(r)} />
+          <Popconfirm
+            title="Delete this usage entry? This will restore the quantity."
+            onConfirm={() =>
+              deleteUsage.mutateAsync(r.id)
+                .then(() => message.success('Entry deleted'))
+                .catch(() => message.error('Failed to delete entry'))
+            }
+          >
+            <Button icon={<DeleteOutlined />} size="small" danger />
+          </Popconfirm>
+        </Space>
       ),
     }] : []),
   ]
@@ -616,6 +695,91 @@ export default function SpecimenDetailPage() {
           </Image.PreviewGroup>
         )}
       </Card>
+
+      {/* Edit Usage Modal */}
+      <Modal
+        title="Edit Usage Entry"
+        open={!!editUsageEntry}
+        onCancel={() => { setEditUsageEntry(null); setEditBreakdownCounts({}) }}
+        footer={null}
+      >
+        <Form form={editUsageForm} layout="vertical" onFinish={handleEditUsage}>
+          <Form.Item name="date" label="Date" rules={[{ required: true }]}>
+            <DatePicker style={{ width: '100%' }} />
+          </Form.Item>
+
+          {hasAssociations ? (
+            <>
+              <Divider orientation="left" orientationMargin={0} style={{ fontSize: 13, marginTop: 0 }}>
+                Specimens removed by group
+              </Divider>
+              {countedAssociations.map((a, i) => {
+                const lifeStageSex = [a.life_stage, a.sex].filter(Boolean).join(' ')
+                return (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', marginBottom: 10, gap: 8 }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 13 }}>
+                        <em>{a.species?.scientific_name || a.free_text_species}</em>
+                      </div>
+                      <div style={{ fontSize: 12, color: '#555', marginTop: 1 }}>
+                        {lifeStageSex || <span style={{ color: '#aaa' }}>No life stage / sex recorded</span>}
+                      </div>
+                    </div>
+                    <span style={{ color: '#888', fontSize: 12, whiteSpace: 'nowrap' }}>
+                      of {a.specimen_count}
+                    </span>
+                    <InputNumber
+                      min={0}
+                      max={a.specimen_count ?? undefined}
+                      precision={0}
+                      placeholder="0"
+                      style={{ width: 80 }}
+                      value={editBreakdownCounts[i] || undefined}
+                      onChange={(v) =>
+                        setEditBreakdownCounts((prev) => ({ ...prev, [i]: v ?? 0 }))
+                      }
+                    />
+                  </div>
+                )
+              })}
+              <div style={{ textAlign: 'right', marginBottom: 12, color: '#555', fontSize: 13 }}>
+                Total: <strong>{Object.values(editBreakdownCounts).reduce((s, n) => s + (n || 0), 0)}</strong> {editUsageForm.getFieldValue('unit') || ''}
+              </div>
+            </>
+          ) : (
+            <Space.Compact style={{ width: '100%' }}>
+              <Form.Item name="quantity_taken" label="Quantity Taken" rules={[{ required: true }]}
+                style={{ width: '60%', marginRight: 8 }}>
+                <InputNumber style={{ width: '100%' }} min={0} step={1} />
+              </Form.Item>
+              <Form.Item name="unit" label="Unit" rules={[{ required: true }]} style={{ width: '40%' }}>
+                <Input placeholder="specimens / mL / mg" />
+              </Form.Item>
+            </Space.Compact>
+          )}
+
+          {hasAssociations && (
+            <Form.Item name="unit" label="Unit" rules={[{ required: true }]}>
+              <Input placeholder="specimens / mL / mg" />
+            </Form.Item>
+          )}
+
+          <Form.Item name="purpose" label="Purpose">
+            <Input placeholder="e.g. DNA extraction, morphology voucher" />
+          </Form.Item>
+          <Form.Item name="notes" label="Notes">
+            <Input.TextArea rows={2} />
+          </Form.Item>
+          <Form.Item>
+            <Space>
+              <Button type="primary" htmlType="submit" loading={updateUsage.isPending}>
+                Save
+              </Button>
+              <Button onClick={() => { setEditUsageEntry(null); setEditBreakdownCounts({}) }}>Cancel</Button>
+            </Space>
+          </Form.Item>
+        </Form>
+      </Modal>
 
       {/* Upload photo modal */}
       <Modal

@@ -15,6 +15,11 @@ export const deleteUsageEntry = async (specimenId: number, entryId: number): Pro
   await apiClient.delete(`/specimens/${specimenId}/usage/${entryId}`)
 }
 
+export const updateUsageEntry = async (specimenId: number, entryId: number, data: TubeUsageLogCreate): Promise<TubeUsageLog> => {
+  const { data: res } = await apiClient.patch<TubeUsageLog>(`/specimens/${specimenId}/usage/${entryId}`, data)
+  return res
+}
+
 export const setUsageRef = async (specimenId: number, entryId: number, molecular_ref: string): Promise<TubeUsageLog> => {
   const { data } = await apiClient.patch<TubeUsageLog>(`/specimens/${specimenId}/usage/${entryId}/ref`, { molecular_ref })
   return data

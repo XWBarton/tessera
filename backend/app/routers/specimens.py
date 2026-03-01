@@ -16,7 +16,7 @@ from ..crud.specimen import (
     delete_specimen,
 )
 from ..crud.project import get_project
-from ..crud.tube_usage_log import get_usage_log, create_usage_event, delete_usage_event
+from ..crud.tube_usage_log import get_usage_log, create_usage_event, update_usage_event, delete_usage_event
 from ..schemas.specimen import (
     SpecimenDetail, SpecimenCreate, SpecimenUpdate, SpecimenList,
     SpecimenBulkImportRequest, SpecimenBulkImportResult,
@@ -27,6 +27,12 @@ from pydantic import BaseModel
 
 class UsageRefUpdate(BaseModel):
     molecular_ref: str
+
+
+class ElementaLinkPayload(BaseModel):
+    specimen_code: str
+    elementa_ref: str
+    run_type: str
 from ..schemas.specimen_photo import SpecimenPhotoRead
 from ..models.tube_usage_log import TubeUsageLog
 from ..models.specimen_photo import SpecimenPhoto
@@ -219,6 +225,15 @@ def create_new_specimen(
         raise HTTPException(status_code=400, detail=f"Tube code '{specimen.specimen_code}' already exists")
 
 
+@router.get("/find-by-code")
+def find_by_code(code: str, db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    from ..models.specimen import Specimen as SpecimenModel
+    specimen = db.query(SpecimenModel).filter(SpecimenModel.specimen_code == code).first()
+    if not specimen:
+        raise HTTPException(status_code=404, detail="Specimen not found")
+    return {"id": specimen.id}
+
+
 @router.get("/{specimen_id}", response_model=SpecimenDetail)
 def read_specimen(
     specimen_id: int,
@@ -307,6 +322,30 @@ def get_specimen_label(
         )
 
 
+@router.post("/link-elementa")
+def link_elementa_run(
+    payload: ElementaLinkPayload,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from ..models.specimen import Specimen as SpecimenModel
+    specimen = db.query(SpecimenModel).filter(SpecimenModel.specimen_code == payload.specimen_code).first()
+    if not specimen:
+        raise HTTPException(status_code=404, detail="Specimen not found in Tessera")
+    usage = TubeUsageLog(
+        specimen_id=specimen.id,
+        date=date.today(),
+        quantity_taken=0,
+        unit="Elementa",
+        purpose=payload.run_type,
+        taken_by_id=current_user.id,
+        molecular_ref=payload.elementa_ref,
+    )
+    db.add(usage)
+    db.commit()
+    return {"ok": True, "usage_id": usage.id}
+
+
 @router.get("/{specimen_id}/usage", response_model=List[TubeUsageLogRead])
 def list_usage_log(
     specimen_id: int,
@@ -350,6 +389,26 @@ def set_usage_ref(
     db.commit()
     db.refresh(entry)
     return entry
+
+
+@router.patch("/{specimen_id}/usage/{entry_id}", response_model=TubeUsageLogRead)
+def update_usage_entry(
+    specimen_id: int,
+    entry_id: int,
+    usage: TubeUsageLogCreate,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    specimen = get_specimen(db, specimen_id)
+    if not specimen:
+        raise HTTPException(status_code=404, detail="Specimen not found")
+    entry = db.query(TubeUsageLog).filter(
+        TubeUsageLog.id == entry_id,
+        TubeUsageLog.specimen_id == specimen_id,
+    ).first()
+    if not entry:
+        raise HTTPException(status_code=404, detail="Usage entry not found")
+    return update_usage_event(db, specimen, entry, usage)
 
 
 @router.delete("/{specimen_id}/usage/{entry_id}")
