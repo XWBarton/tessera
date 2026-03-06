@@ -33,6 +33,11 @@ class ElementaLinkPayload(BaseModel):
     specimen_code: str
     elementa_ref: str
     run_type: str
+
+
+class ElementaUnlinkPayload(BaseModel):
+    specimen_code: str
+    elementa_ref: str
 from ..schemas.specimen_photo import SpecimenPhotoRead
 from ..models.tube_usage_log import TubeUsageLog
 from ..models.specimen_photo import SpecimenPhoto
@@ -344,6 +349,28 @@ def link_elementa_run(
     db.add(usage)
     db.commit()
     return {"ok": True, "usage_id": usage.id}
+
+
+@router.delete("/unlink-elementa")
+def unlink_elementa_run(
+    payload: ElementaUnlinkPayload,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    from ..models.specimen import Specimen as SpecimenModel
+    specimen = db.query(SpecimenModel).filter(SpecimenModel.specimen_code == payload.specimen_code).first()
+    if not specimen:
+        return {"ok": False}
+    updated = (
+        db.query(TubeUsageLog)
+        .filter(
+            TubeUsageLog.specimen_id == specimen.id,
+            TubeUsageLog.molecular_ref == payload.elementa_ref,
+        )
+        .update({"molecular_ref": None})
+    )
+    db.commit()
+    return {"ok": True, "cleared": updated}
 
 
 @router.get("/{specimen_id}/usage", response_model=List[TubeUsageLogRead])
