@@ -1,8 +1,8 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Typography, Table, Button, Modal, Form, Input, InputNumber, Space, message, Popconfirm, Tag, Select, Drawer, Spin, Tabs } from 'antd'
 import { PlusOutlined, DeleteOutlined, EditOutlined } from '@ant-design/icons'
-import { MapContainer, TileLayer, LayersControl, CircleMarker, Circle } from 'react-leaflet'
+import { MapContainer, TileLayer, LayersControl, CircleMarker, Circle, useMap } from 'react-leaflet'
 import { useSites, useCreateSite, useUpdateSite, useDeleteSite, useSiteSpecimens } from '../hooks/useSites'
 import { useAuth } from '../context/AuthContext'
 import type { Site, Specimen } from '../types'
@@ -82,6 +82,15 @@ function SiteForm({ onFinish, loading, initialValues }: {
   )
 }
 
+function InvalidateSize() {
+  const map = useMap()
+  useEffect(() => {
+    const t = setTimeout(() => map.invalidateSize(), 200)
+    return () => clearTimeout(t)
+  }, [map])
+  return null
+}
+
 function SiteMap({ site }: { site: Site }) {
   const precision = site.precision || 'GPS'
   const radiusM = PRECISION_RADIUS_M[precision]
@@ -110,6 +119,7 @@ function SiteMap({ site }: { site: Site }) {
             />
           </LayersControl.BaseLayer>
         </LayersControl>
+        <InvalidateSize />
         {radiusM ? (
           <Circle
             center={pos}
