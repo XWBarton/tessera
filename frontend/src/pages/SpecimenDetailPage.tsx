@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Card,
@@ -20,6 +20,7 @@ import {
   Divider,
   Image,
   Upload,
+  AutoComplete,
 } from 'antd'
 import { EditOutlined, DeleteOutlined, DownloadOutlined, ExperimentOutlined, CameraOutlined, PlusOutlined } from '@ant-design/icons'
 import type { MenuProps } from 'antd'
@@ -33,6 +34,23 @@ import { downloadLabel, ZPL_TEMPLATE_OPTIONS, getPhotos, uploadPhoto, deletePhot
 import type { ZplTemplate } from '../api/specimens'
 import { useAuth } from '../context/AuthContext'
 import type { SpecimenSpecies, TubeUsageLog, SpecimenPhoto } from '../types'
+
+const UNIT_SUGGESTIONS = [
+  { value: 'µL' }, { value: 'mL' }, { value: 'L' },
+  { value: 'µg' }, { value: 'mg' }, { value: 'g' }, { value: 'kg' },
+  { value: 'specimens' }, { value: 'individuals' },
+]
+
+// Mirrors the backend _convert() logic for live UI hints
+const VOLUME_TO_UL: Record<string, number> = { ul: 1, µl: 1, μl: 1, ml: 1e3, cl: 1e4, dl: 1e5, l: 1e6 }
+const MASS_TO_UG: Record<string, number> = { ug: 1, µg: 1, μg: 1, mg: 1e3, g: 1e6, kg: 1e9 }
+function convertQty(value: number, from: string, to: string): number | null {
+  const f = from.trim().toLowerCase(), t = to.trim().toLowerCase()
+  if (f === t) return value
+  if (VOLUME_TO_UL[f] && VOLUME_TO_UL[t]) return value * VOLUME_TO_UL[f] / VOLUME_TO_UL[t]
+  if (MASS_TO_UG[f] && MASS_TO_UG[t]) return value * MASS_TO_UG[f] / MASS_TO_UG[t]
+  return null
+}
 
 /** Loads a single photo file as a blob URL (authenticated). */
 function PhotoThumbnail({
@@ -156,6 +174,12 @@ export default function SpecimenDetailPage() {
   const [editUsageForm] = Form.useForm()
   // breakdown counts keyed by association index
   const [breakdownCounts, setBreakdownCounts] = useState<Record<number, number>>({})
+
+  // Live unit conversion hints for both modals
+  const recordUnit = Form.useWatch('unit', usageForm)
+  const recordQty = Form.useWatch('quantity_taken', usageForm)
+  const editUnit = Form.useWatch('unit', editUsageForm)
+  const editQty = Form.useWatch('quantity_taken', editUsageForm)
 
   // Auto-open Record Usage when arriving from Elementa with ?elementa_ref=...
   const elementaRef = searchParams.get('elementa_ref')
@@ -353,6 +377,23 @@ export default function SpecimenDetailPage() {
   const total = specimen.quantity_value ?? 0
   const pct = total > 0 ? Math.round((remaining / total) * 100) : 0
   const progressStatus = pct <= 10 ? 'exception' : pct <= 30 ? 'normal' : 'success'
+
+  // Live conversion hints — shown in the modals when unit differs from specimen unit
+  const specimenUnit = specimen.quantity_unit
+  const recordConvHint = useMemo(() => {
+    if (!specimenUnit || !recordUnit || !recordQty || recordUnit === specimenUnit) return null
+    const converted = convertQty(Number(recordQty), recordUnit, specimenUnit)
+    if (converted === null) return null
+    const left = Math.max(0, remaining - converted)
+    return `${recordQty} ${recordUnit} = ${+converted.toFixed(6).replace(/\.?0+$/, '')} ${specimenUnit} → ${+left.toFixed(6).replace(/\.?0+$/, '')} ${specimenUnit} remaining`
+  }, [specimenUnit, recordUnit, recordQty, remaining])
+
+  const editConvHint = useMemo(() => {
+    if (!specimenUnit || !editUnit || !editQty || editUnit === specimenUnit) return null
+    const converted = convertQty(Number(editQty), editUnit, specimenUnit)
+    if (converted === null) return null
+    return `${editQty} ${editUnit} = ${+converted.toFixed(6).replace(/\.?0+$/, '')} ${specimenUnit}`
+  }, [specimenUnit, editUnit, editQty])
 
   const totalSpeciesCount = specimen.species_associations.reduce(
     (sum, a) => sum + (a.specimen_count ?? 0),
@@ -750,18 +791,24 @@ export default function SpecimenDetailPage() {
             <Space.Compact style={{ width: '100%' }}>
               <Form.Item name="quantity_taken" label="Quantity Taken" rules={[{ required: true }]}
                 style={{ width: '60%', marginRight: 8 }}>
-                <InputNumber style={{ width: '100%' }} min={0} step={1} />
+                <InputNumber style={{ width: '100%' }} min={0} step={0.001} />
               </Form.Item>
               <Form.Item name="unit" label="Unit" rules={[{ required: true }]} style={{ width: '40%' }}>
-                <Input placeholder="specimens / mL / mg" />
+                <AutoComplete options={UNIT_SUGGESTIONS} placeholder="mL, L, mg…" filterOption />
               </Form.Item>
             </Space.Compact>
           )}
 
           {hasAssociations && (
             <Form.Item name="unit" label="Unit" rules={[{ required: true }]}>
-              <Input placeholder="specimens / mL / mg" />
+              <AutoComplete options={UNIT_SUGGESTIONS} placeholder="mL, L, mg…" filterOption />
             </Form.Item>
+          )}
+
+          {editConvHint && (
+            <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: -8, marginBottom: 12 }}>
+              {editConvHint}
+            </Typography.Text>
           )}
 
           <Form.Item name="purpose" label="Purpose">
@@ -885,18 +932,24 @@ export default function SpecimenDetailPage() {
             <Space.Compact style={{ width: '100%' }}>
               <Form.Item name="quantity_taken" label="Quantity Taken" rules={[{ required: true }]}
                 style={{ width: '60%', marginRight: 8 }}>
-                <InputNumber style={{ width: '100%' }} min={0} step={1} placeholder="0 for non-destructive" />
+                <InputNumber style={{ width: '100%' }} min={0} step={0.001} placeholder="0 for non-destructive" />
               </Form.Item>
               <Form.Item name="unit" label="Unit" rules={[{ required: true }]} style={{ width: '40%' }}>
-                <Input placeholder="specimens / mL / mg" />
+                <AutoComplete options={UNIT_SUGGESTIONS} placeholder="mL, L, mg…" filterOption />
               </Form.Item>
             </Space.Compact>
           )}
 
           {hasAssociations && (
             <Form.Item name="unit" label="Unit" rules={[{ required: true }]}>
-              <Input placeholder="specimens / mL / mg" />
+              <AutoComplete options={UNIT_SUGGESTIONS} placeholder="mL, L, mg…" filterOption />
             </Form.Item>
+          )}
+
+          {recordConvHint && (
+            <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: -8, marginBottom: 12 }}>
+              {recordConvHint}
+            </Typography.Text>
           )}
 
           <Form.Item name="purpose" label="Purpose">
