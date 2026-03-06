@@ -79,10 +79,16 @@ def test_connection(
     _: User = Depends(get_current_user),
 ):
     """Server-side connectivity check — avoids browser CORS restrictions.
-    Rewrites localhost to host.docker.internal so the request escapes the container."""
+    Uses ELEMENTA_INTERNAL_URL env var if set (for tunnelled/cloud deployments where
+    the public URL isn't reachable from inside Docker), otherwise rewrites localhost
+    to host.docker.internal so the request escapes the container."""
     import re
+    import os
     clean = url.rstrip("/")
-    server_url = re.sub(r"(?i)^(https?://)localhost\b", r"\1host.docker.internal", clean)
+    internal = os.environ.get("ELEMENTA_INTERNAL_URL", "").strip()
+    server_url = internal.rstrip("/") if internal else re.sub(
+        r"(?i)^(https?://)localhost\b", r"\1host.docker.internal", clean
+    )
     try:
         req = urllib.request.urlopen(f"{server_url}/api/health", timeout=5)
         return {"ok": req.status == 200}

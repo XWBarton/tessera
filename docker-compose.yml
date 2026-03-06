@@ -12,6 +12,12 @@ services:
       - FIRST_ADMIN_EMAIL=${FIRST_ADMIN_EMAIL:-admin@example.com}
       - FIRST_ADMIN_FULL_NAME=${FIRST_ADMIN_FULL_NAME:-Administrator}
       - ELEMENTA_URL=${ELEMENTA_URL:-}
+      # For same-server / Cloudflare-tunnel deployments: set this to the internal
+      # port Elementa is reachable on from inside Docker (e.g. http://host.docker.internal:8231)
+      # so backend→backend calls bypass the public tunnel.
+      - ELEMENTA_INTERNAL_URL=${ELEMENTA_INTERNAL_URL:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - tessera_data:/data
     expose:
