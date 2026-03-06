@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Card,
@@ -380,20 +380,17 @@ export default function SpecimenDetailPage() {
 
   // Live conversion hints — shown in the modals when unit differs from specimen unit
   const specimenUnit = specimen.quantity_unit
-  const recordConvHint = useMemo(() => {
-    if (!specimenUnit || !recordUnit || !recordQty || recordUnit === specimenUnit) return null
-    const converted = convertQty(Number(recordQty), recordUnit, specimenUnit)
-    if (converted === null) return null
-    const left = Math.max(0, remaining - converted)
-    return `${recordQty} ${recordUnit} = ${+converted.toFixed(6).replace(/\.?0+$/, '')} ${specimenUnit} → ${+left.toFixed(6).replace(/\.?0+$/, '')} ${specimenUnit} remaining`
-  }, [specimenUnit, recordUnit, recordQty, remaining])
+  const _recordConverted = specimenUnit && recordUnit && recordQty && recordUnit !== specimenUnit
+    ? convertQty(Number(recordQty), recordUnit, specimenUnit) : null
+  const recordConvHint = _recordConverted !== null && specimenUnit
+    ? `${recordQty} ${recordUnit} = ${+_recordConverted.toFixed(6).replace(/\.?0+$/, '')} ${specimenUnit} → ${+Math.max(0, remaining - _recordConverted).toFixed(6).replace(/\.?0+$/, '')} ${specimenUnit} remaining`
+    : null
 
-  const editConvHint = useMemo(() => {
-    if (!specimenUnit || !editUnit || !editQty || editUnit === specimenUnit) return null
-    const converted = convertQty(Number(editQty), editUnit, specimenUnit)
-    if (converted === null) return null
-    return `${editQty} ${editUnit} = ${+converted.toFixed(6).replace(/\.?0+$/, '')} ${specimenUnit}`
-  }, [specimenUnit, editUnit, editQty])
+  const _editConverted = specimenUnit && editUnit && editQty && editUnit !== specimenUnit
+    ? convertQty(Number(editQty), editUnit, specimenUnit) : null
+  const editConvHint = _editConverted !== null && specimenUnit
+    ? `${editQty} ${editUnit} = ${+_editConverted.toFixed(6).replace(/\.?0+$/, '')} ${specimenUnit}`
+    : null
 
   const totalSpeciesCount = specimen.species_associations.reduce(
     (sum, a) => sum + (a.specimen_count ?? 0),
