@@ -178,8 +178,10 @@ export default function SpecimenDetailPage() {
   const [nonDestructiveRecord, setNonDestructiveRecord] = useState(false)
   const [nonDestructiveEdit, setNonDestructiveEdit] = useState(false)
   const [destTubeOptions, setDestTubeOptions] = useState<{ value: string }[]>([])
+  const [destTubeTyped, setDestTubeTyped] = useState('')
 
   const searchDestTube = async (q: string) => {
+    setDestTubeTyped(q)
     if (!q || q.length < 2) { setDestTubeOptions([]); return }
     const res = await getSpecimens({ search: q, limit: 20 })
     setDestTubeOptions(
@@ -188,6 +190,9 @@ export default function SpecimenDetailPage() {
         .map(s => ({ value: s.specimen_code }))
     )
   }
+
+  const destTubeNoMatch = destTubeTyped.length >= 2 &&
+    !destTubeOptions.some(o => o.value.toLowerCase() === destTubeTyped.toLowerCase())
 
   // Live unit conversion hints for both modals
   const recordUnit = Form.useWatch('unit', usageForm)
@@ -862,14 +867,27 @@ export default function SpecimenDetailPage() {
           </Form.Item>
 
           {nonDestructiveEdit && (
-            <Form.Item name="destination_tube" label="Destination Tube" help="Search an existing tube or type a new code — you can create the tube later">
+            <Form.Item name="destination_tube" label="Destination Tube">
               <AutoComplete
                 options={destTubeOptions}
                 onSearch={searchDestTube}
-                placeholder="e.g. AMPH2024-042"
+                placeholder="Search or type a tube code…"
                 allowClear
               />
             </Form.Item>
+            {destTubeNoMatch && (
+              <div style={{ marginTop: -16, marginBottom: 16, fontSize: 12 }}>
+                <Typography.Text type="secondary">No tube found. </Typography.Text>
+                <Button
+                  type="link"
+                  size="small"
+                  style={{ padding: 0, fontSize: 12 }}
+                  onClick={() => window.open(`/specimens/new?code=${encodeURIComponent(destTubeTyped)}`, '_blank')}
+                >
+                  Create "{destTubeTyped}" →
+                </Button>
+              </div>
+            )}
           )}
 
           <Form.Item name="purpose" label="Purpose">
@@ -966,14 +984,27 @@ export default function SpecimenDetailPage() {
           </Form.Item>
 
           {nonDestructiveRecord && (
-            <Form.Item name="destination_tube" label="Destination Tube" help="Search an existing tube or type a new code — you can create the tube later">
+            <Form.Item name="destination_tube" label="Destination Tube">
               <AutoComplete
                 options={destTubeOptions}
                 onSearch={searchDestTube}
-                placeholder="e.g. AMPH2024-042"
+                placeholder="Search or type a tube code…"
                 allowClear
               />
             </Form.Item>
+            {destTubeNoMatch && (
+              <div style={{ marginTop: -16, marginBottom: 16, fontSize: 12 }}>
+                <Typography.Text type="secondary">No tube found. </Typography.Text>
+                <Button
+                  type="link"
+                  size="small"
+                  style={{ padding: 0, fontSize: 12 }}
+                  onClick={() => window.open(`/specimens/new?code=${encodeURIComponent(destTubeTyped)}`, '_blank')}
+                >
+                  Create "{destTubeTyped}" →
+                </Button>
+              </div>
+            )}
           )}
 
           {hasAssociations ? (

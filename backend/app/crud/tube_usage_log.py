@@ -72,6 +72,8 @@ def create_usage_event(
         unit=data.unit,
         purpose=data.purpose,
         molecular_ref=data.molecular_ref,
+        non_destructive=data.non_destructive,
+        destination_tube=data.destination_tube,
         breakdown=breakdown_json,
         notes=data.notes,
         taken_by_id=taken_by_id,
@@ -105,6 +107,8 @@ def update_usage_event(
     entry.quantity_taken = data.quantity_taken
     entry.unit = data.unit
     entry.purpose = data.purpose
+    entry.non_destructive = data.non_destructive
+    entry.destination_tube = data.destination_tube
     entry.breakdown = breakdown_json
     entry.notes = data.notes
     db.commit()

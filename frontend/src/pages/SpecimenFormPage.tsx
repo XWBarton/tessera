@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   Form,
   Input,
@@ -34,6 +34,7 @@ type CollectorMode = 'user' | 'name' | 'unknown'
 export default function SpecimenFormPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { user } = useAuth()
   const isEdit = !!id
   const specimenId = Number(id)
@@ -91,12 +92,14 @@ export default function SpecimenFormPage() {
       })
     } else if (!isEdit) {
       setCollectorMode('user')
+      const codeParam = searchParams.get('code')
       form.setFieldsValue({
         collector_id: user?.id,
         species_associations: [],
+        ...(codeParam ? { specimen_code: codeParam } : {}),
       })
     }
-  }, [isEdit, specimen, form, user])
+  }, [isEdit, specimen, form, user, searchParams])
 
   if (isEdit && loadingSpecimen) return <Spin />
 
