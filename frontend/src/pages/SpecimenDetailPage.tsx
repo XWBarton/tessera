@@ -31,7 +31,7 @@ import dayjs from 'dayjs'
 import { useSpecimen, useDeleteSpecimen, useUpdateSpecimen } from '../hooks/useSpecimens'
 import { useConfig } from '../hooks/useConfig'
 import { useTubeUsage, useRecordUsage, useUpdateUsageEntry, useDeleteUsageEntry, useSetUsageRef } from '../hooks/useTubeUsage'
-import { downloadLabel, ZPL_TEMPLATE_OPTIONS, getPhotos, uploadPhoto, deletePhoto, getPhotoBlob } from '../api/specimens'
+import { downloadLabel, ZPL_TEMPLATE_OPTIONS, getPhotos, uploadPhoto, deletePhoto, getPhotoBlob, getSpecimens } from '../api/specimens'
 import type { ZplTemplate } from '../api/specimens'
 import { useAuth } from '../context/AuthContext'
 import type { SpecimenSpecies, TubeUsageLog, SpecimenPhoto } from '../types'
@@ -177,6 +177,17 @@ export default function SpecimenDetailPage() {
   const [breakdownCounts, setBreakdownCounts] = useState<Record<number, number>>({})
   const [nonDestructiveRecord, setNonDestructiveRecord] = useState(false)
   const [nonDestructiveEdit, setNonDestructiveEdit] = useState(false)
+  const [destTubeOptions, setDestTubeOptions] = useState<{ value: string }[]>([])
+
+  const searchDestTube = async (q: string) => {
+    if (!q || q.length < 2) { setDestTubeOptions([]); return }
+    const res = await getSpecimens({ search: q, limit: 20 })
+    setDestTubeOptions(
+      res.items
+        .filter(s => s.id !== specimenId)
+        .map(s => ({ value: s.specimen_code }))
+    )
+  }
 
   // Live unit conversion hints for both modals
   const recordUnit = Form.useWatch('unit', usageForm)
@@ -305,7 +316,7 @@ export default function SpecimenDetailPage() {
 
       await recordUsage.mutateAsync({
         date: dayjs(values.date as string).format('YYYY-MM-DD'),
-        quantity_taken: nonDestructiveRecord ? 0 : quantity_taken,
+        quantity_taken,
         unit: values.unit as string || 'specimens',
         purpose: values.purpose as string | undefined,
         molecular_ref: values.molecular_ref as string | undefined,
@@ -363,7 +374,7 @@ export default function SpecimenDetailPage() {
         entryId: editUsageEntry.id,
         data: {
           date: dayjs(values.date as string).format('YYYY-MM-DD'),
-          quantity_taken: nonDestructiveEdit ? 0 : quantity_taken,
+          quantity_taken,
           unit: values.unit as string || 'specimens',
           purpose: values.purpose as string | undefined,
           non_destructive: nonDestructiveEdit,
@@ -472,7 +483,13 @@ export default function SpecimenDetailPage() {
       key: 'destination_tube',
       width: 140,
       onCell: () => ({ style: nowrap }),
-      render: (v: string) => v ? <Tag icon={<span>→ </span>}>{v}</Tag> : '—',
+      render: (v: string) => v
+        ? <Tag
+            icon={<span>→ </span>}
+            style={{ cursor: 'pointer' }}
+            onClick={() => navigate(`/specimens?search=${encodeURIComponent(v)}`)}
+          >{v}</Tag>
+        : '—',
     },
     {
       title: 'Purpose',
@@ -839,14 +856,19 @@ export default function SpecimenDetailPage() {
             />
             {nonDestructiveEdit && (
               <Typography.Text type="secondary" style={{ fontSize: 12, marginLeft: 10 }}>
-                Specimen retained — quantity will be recorded as 0
+                Material moved to another tube — quantity deducted from this tube
               </Typography.Text>
             )}
           </Form.Item>
 
           {nonDestructiveEdit && (
-            <Form.Item name="destination_tube" label="Destination Tube">
-              <Input placeholder="e.g. AMPH2024-002 or freezer box A1" />
+            <Form.Item name="destination_tube" label="Destination Tube" rules={[{ required: true, message: 'Enter the destination tube code' }]}>
+              <AutoComplete
+                options={destTubeOptions}
+                onSearch={searchDestTube}
+                placeholder="Search tube code…"
+                allowClear
+              />
             </Form.Item>
           )}
 
@@ -938,14 +960,19 @@ export default function SpecimenDetailPage() {
             />
             {nonDestructiveRecord && (
               <Typography.Text type="secondary" style={{ fontSize: 12, marginLeft: 10 }}>
-                Specimen retained — quantity will be recorded as 0
+                Material moved to another tube — quantity deducted from this tube
               </Typography.Text>
             )}
           </Form.Item>
 
           {nonDestructiveRecord && (
-            <Form.Item name="destination_tube" label="Destination Tube">
-              <Input placeholder="e.g. AMPH2024-002 or freezer box A1" />
+            <Form.Item name="destination_tube" label="Destination Tube" rules={[{ required: true, message: 'Enter the destination tube code' }]}>
+              <AutoComplete
+                options={destTubeOptions}
+                onSearch={searchDestTube}
+                placeholder="Search tube code…"
+                allowClear
+              />
             </Form.Item>
           )}
 
