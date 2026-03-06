@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Typography, Table, Button, Modal, Form, Input, InputNumber, Space, message, Popconfirm, Tag, Select, Drawer, Spin } from 'antd'
+import { Typography, Table, Button, Modal, Form, Input, InputNumber, Space, message, Popconfirm, Tag, Select, Drawer, Spin, Tabs } from 'antd'
 import { PlusOutlined, DeleteOutlined, EditOutlined } from '@ant-design/icons'
+import { MapContainer, TileLayer, LayersControl, CircleMarker, Circle } from 'react-leaflet'
 import { useSites, useCreateSite, useUpdateSite, useDeleteSite, useSiteSpecimens } from '../hooks/useSites'
 import { useAuth } from '../context/AuthContext'
 import type { Site, Specimen } from '../types'
+import 'leaflet/dist/leaflet.css'
 
 const PRECISION_OPTIONS = [
   { value: 'GPS', label: 'GPS — exact point' },
@@ -20,6 +22,21 @@ const PRECISION_COLORS: Record<string, string> = {
   City: 'orange',
   Region: 'volcano',
   State: 'red',
+}
+
+const PRECISION_RADIUS_M: Record<string, number> = {
+  Suburb: 1500,
+  City: 8000,
+  Region: 50000,
+  State: 150000,
+}
+
+const PRECISION_ZOOM: Record<string, number> = {
+  GPS: 14,
+  Suburb: 12,
+  City: 10,
+  Region: 8,
+  State: 6,
 }
 
 function SiteForm({ onFinish, loading, initialValues }: {
@@ -65,9 +82,61 @@ function SiteForm({ onFinish, loading, initialValues }: {
   )
 }
 
+function SiteMap({ site }: { site: Site }) {
+  const precision = site.precision || 'GPS'
+  const radiusM = PRECISION_RADIUS_M[precision]
+  const pos: [number, number] = [site.lat!, site.lon!]
+  const zoom = PRECISION_ZOOM[precision] ?? 10
+
+  return (
+    <div>
+      <MapContainer
+        key={site.id}
+        center={pos}
+        zoom={zoom}
+        style={{ height: 320, width: '100%', borderRadius: 8 }}
+      >
+        <LayersControl position="topright">
+          <LayersControl.BaseLayer checked name="Street">
+            <TileLayer
+              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            />
+          </LayersControl.BaseLayer>
+          <LayersControl.BaseLayer name="Satellite">
+            <TileLayer
+              attribution='Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+              url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+            />
+          </LayersControl.BaseLayer>
+        </LayersControl>
+        {radiusM ? (
+          <Circle
+            center={pos}
+            radius={radiusM}
+            pathOptions={{ fillColor: '#1565c0', color: '#1565c0', weight: 1, opacity: 0.7, fillOpacity: 0.2 }}
+          />
+        ) : (
+          <CircleMarker
+            center={pos}
+            radius={10}
+            pathOptions={{ fillColor: '#1565c0', color: '#fff', weight: 2, opacity: 1, fillOpacity: 0.85 }}
+          />
+        )}
+      </MapContainer>
+      {precision !== 'GPS' && (
+        <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 6 }}>
+          Location shown at {precision.toLowerCase()}-level precision
+        </Typography.Text>
+      )}
+    </div>
+  )
+}
+
 function SiteSpecimensDrawer({ site, onClose }: { site: Site; onClose: () => void }) {
   const navigate = useNavigate()
   const { data: specimens, isLoading } = useSiteSpecimens(site.id)
+  const hasCoords = site.lat != null && site.lon != null
 
   const specimenColumns = [
     {
@@ -93,6 +162,34 @@ function SiteSpecimensDrawer({ site, onClose }: { site: Site; onClose: () => voi
     { title: 'Sample Type', key: 'sample_type', render: (_: unknown, r: Specimen) => r.sample_type?.name ?? '—' },
   ]
 
+  const specimenTab = isLoading ? <Spin /> : (
+    <>
+      <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
+        {specimens?.length ?? 0} tube{specimens?.length !== 1 ? 's' : ''} collected at this site
+      </Typography.Text>
+      <Table
+        dataSource={specimens}
+        columns={specimenColumns}
+        rowKey="id"
+        size="small"
+        pagination={{ pageSize: 20, hideOnSinglePage: true }}
+      />
+    </>
+  )
+
+  const tabItems = [
+    ...(hasCoords ? [{
+      key: 'map',
+      label: 'Map',
+      children: <SiteMap site={site} />,
+    }] : []),
+    {
+      key: 'specimens',
+      label: `Specimens${specimens ? ` (${specimens.length})` : ''}`,
+      children: specimenTab,
+    },
+  ]
+
   return (
     <Drawer
       title={
@@ -106,22 +203,7 @@ function SiteSpecimensDrawer({ site, onClose }: { site: Site; onClose: () => voi
       onClose={onClose}
       width={700}
     >
-      {isLoading ? (
-        <Spin />
-      ) : (
-        <>
-          <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
-            {specimens?.length ?? 0} tube{specimens?.length !== 1 ? 's' : ''} collected at this site
-          </Typography.Text>
-          <Table
-            dataSource={specimens}
-            columns={specimenColumns}
-            rowKey="id"
-            size="small"
-            pagination={{ pageSize: 20, hideOnSinglePage: true }}
-          />
-        </>
-      )}
+      <Tabs defaultActiveKey={hasCoords ? 'map' : 'specimens'} items={tabItems} />
     </Drawer>
   )
 }
@@ -228,7 +310,7 @@ export default function SitesPage() {
         )}
       </div>
       <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
-        Click a site name to view associated tubes.
+        Click a site name to view its location and associated tubes.
       </Typography.Text>
       <Table dataSource={sites} columns={columns} rowKey="id" loading={isLoading} />
 

@@ -1,8 +1,22 @@
 import { useMemo } from 'react'
 import { Typography, Card } from 'antd'
-import { MapContainer, TileLayer, CircleMarker, Circle, Popup } from 'react-leaflet'
+import { MapContainer, TileLayer, LayersControl, CircleMarker, Circle, Popup } from 'react-leaflet'
 import { useSpecimens } from '../hooks/useSpecimens'
 import 'leaflet/dist/leaflet.css'
+
+const OSM_LAYER = (
+  <TileLayer
+    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+  />
+)
+
+const SATELLITE_LAYER = (
+  <TileLayer
+    attribution='Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+    url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+  />
+)
 
 const CONFIDENCE_COLORS: Record<string, string> = {
   Confirmed: '#2e7d32',
@@ -61,10 +75,14 @@ export default function MapPage() {
           zoom={specimens.length > 0 ? 8 : 2}
           style={{ height: '70vh', width: '100%' }}
         >
-          <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          />
+          <LayersControl position="topright">
+            <LayersControl.BaseLayer checked name="Street">
+              {OSM_LAYER}
+            </LayersControl.BaseLayer>
+            <LayersControl.BaseLayer name="Satellite">
+              {SATELLITE_LAYER}
+            </LayersControl.BaseLayer>
+          </LayersControl>
           {specimens.map((s) => {
             const first = s.species_associations[0]
             const color = first ? CONFIDENCE_COLORS[first.confidence] || '#757575' : '#757575'
