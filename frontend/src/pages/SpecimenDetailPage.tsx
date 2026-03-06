@@ -862,11 +862,11 @@ export default function SpecimenDetailPage() {
           </Form.Item>
 
           {nonDestructiveEdit && (
-            <Form.Item name="destination_tube" label="Destination Tube" rules={[{ required: true, message: 'Enter the destination tube code' }]}>
+            <Form.Item name="destination_tube" label="Destination Tube" help="Search an existing tube or type a new code — you can create the tube later">
               <AutoComplete
                 options={destTubeOptions}
                 onSearch={searchDestTube}
-                placeholder="Search tube code…"
+                placeholder="e.g. AMPH2024-042"
                 allowClear
               />
             </Form.Item>
@@ -966,11 +966,11 @@ export default function SpecimenDetailPage() {
           </Form.Item>
 
           {nonDestructiveRecord && (
-            <Form.Item name="destination_tube" label="Destination Tube" rules={[{ required: true, message: 'Enter the destination tube code' }]}>
+            <Form.Item name="destination_tube" label="Destination Tube" help="Search an existing tube or type a new code — you can create the tube later">
               <AutoComplete
                 options={destTubeOptions}
                 onSearch={searchDestTube}
-                placeholder="Search tube code…"
+                placeholder="e.g. AMPH2024-042"
                 allowClear
               />
             </Form.Item>
