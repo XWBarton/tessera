@@ -21,6 +21,7 @@ import {
   Image,
   Upload,
   AutoComplete,
+  Switch,
 } from 'antd'
 import { EditOutlined, DeleteOutlined, DownloadOutlined, ExperimentOutlined, CameraOutlined, PlusOutlined } from '@ant-design/icons'
 import type { MenuProps } from 'antd'
@@ -174,6 +175,8 @@ export default function SpecimenDetailPage() {
   const [editUsageForm] = Form.useForm()
   // breakdown counts keyed by association index
   const [breakdownCounts, setBreakdownCounts] = useState<Record<number, number>>({})
+  const [nonDestructiveRecord, setNonDestructiveRecord] = useState(false)
+  const [nonDestructiveEdit, setNonDestructiveEdit] = useState(false)
 
   // Live unit conversion hints for both modals
   const recordUnit = Form.useWatch('unit', usageForm)
@@ -302,10 +305,12 @@ export default function SpecimenDetailPage() {
 
       await recordUsage.mutateAsync({
         date: dayjs(values.date as string).format('YYYY-MM-DD'),
-        quantity_taken,
-        unit: values.unit as string,
+        quantity_taken: nonDestructiveRecord ? 0 : quantity_taken,
+        unit: values.unit as string || 'specimens',
         purpose: values.purpose as string | undefined,
         molecular_ref: values.molecular_ref as string | undefined,
+        non_destructive: nonDestructiveRecord,
+        destination_tube: (values.destination_tube as string | undefined) || undefined,
         breakdown,
         notes: values.notes as string | undefined,
       })
@@ -313,6 +318,7 @@ export default function SpecimenDetailPage() {
       setUsageModalOpen(false)
       usageForm.resetFields()
       setBreakdownCounts({})
+      setNonDestructiveRecord(false)
     } catch {
       message.error('Failed to record usage')
     }
@@ -327,11 +333,13 @@ export default function SpecimenDetailPage() {
       })
     }
     setEditBreakdownCounts(counts)
+    setNonDestructiveEdit(entry.non_destructive ?? false)
     editUsageForm.setFieldsValue({
       date: dayjs(entry.date),
       unit: entry.unit,
       quantity_taken: entry.quantity_taken,
       purpose: entry.purpose,
+      destination_tube: entry.destination_tube,
       notes: entry.notes,
     })
     setEditUsageEntry(entry)
@@ -355,9 +363,11 @@ export default function SpecimenDetailPage() {
         entryId: editUsageEntry.id,
         data: {
           date: dayjs(values.date as string).format('YYYY-MM-DD'),
-          quantity_taken,
-          unit: values.unit as string,
+          quantity_taken: nonDestructiveEdit ? 0 : quantity_taken,
+          unit: values.unit as string || 'specimens',
           purpose: values.purpose as string | undefined,
+          non_destructive: nonDestructiveEdit,
+          destination_tube: (values.destination_tube as string | undefined) || undefined,
           breakdown,
           notes: values.notes as string | undefined,
         },
@@ -366,6 +376,7 @@ export default function SpecimenDetailPage() {
       setEditUsageEntry(null)
       editUsageForm.resetFields()
       setEditBreakdownCounts({})
+      setNonDestructiveEdit(false)
     } catch {
       message.error('Failed to update usage')
     }
@@ -448,9 +459,20 @@ export default function SpecimenDetailPage() {
     {
       title: 'Taken',
       key: 'taken',
-      width: 120,
+      width: 140,
       onCell: () => ({ style: nowrap }),
-      render: (_: unknown, r: TubeUsageLog) => `${r.quantity_taken} ${r.unit}`,
+      render: (_: unknown, r: TubeUsageLog) =>
+        r.non_destructive
+          ? <Tag color="cyan" style={{ margin: 0 }}>Non-destructive</Tag>
+          : `${r.quantity_taken} ${r.unit}`,
+    },
+    {
+      title: 'Destination',
+      dataIndex: 'destination_tube',
+      key: 'destination_tube',
+      width: 140,
+      onCell: () => ({ style: nowrap }),
+      render: (v: string) => v ? <Tag icon={<span>→ </span>}>{v}</Tag> : '—',
     },
     {
       title: 'Purpose',
@@ -808,6 +830,26 @@ export default function SpecimenDetailPage() {
             </Typography.Text>
           )}
 
+          <Form.Item label="Non-destructive use" style={{ marginBottom: 8 }}>
+            <Switch
+              checked={nonDestructiveEdit}
+              onChange={setNonDestructiveEdit}
+              checkedChildren="Non-destructive"
+              unCheckedChildren="Destructive"
+            />
+            {nonDestructiveEdit && (
+              <Typography.Text type="secondary" style={{ fontSize: 12, marginLeft: 10 }}>
+                Specimen retained — quantity will be recorded as 0
+              </Typography.Text>
+            )}
+          </Form.Item>
+
+          {nonDestructiveEdit && (
+            <Form.Item name="destination_tube" label="Destination Tube">
+              <Input placeholder="e.g. AMPH2024-002 or freezer box A1" />
+            </Form.Item>
+          )}
+
           <Form.Item name="purpose" label="Purpose">
             <Input placeholder="e.g. DNA extraction, morphology voucher" />
           </Form.Item>
@@ -878,7 +920,7 @@ export default function SpecimenDetailPage() {
       <Modal
         title="Record Usage"
         open={usageModalOpen}
-        onCancel={() => { setUsageModalOpen(false); setBreakdownCounts({}) }}
+        onCancel={() => { setUsageModalOpen(false); setBreakdownCounts({}); setNonDestructiveRecord(false) }}
         footer={null}
       >
         <Form form={usageForm} layout="vertical" onFinish={handleRecordUsage}>
@@ -886,6 +928,26 @@ export default function SpecimenDetailPage() {
             initialValue={dayjs()}>
             <DatePicker style={{ width: '100%' }} />
           </Form.Item>
+
+          <Form.Item label="Non-destructive use" style={{ marginBottom: 8 }}>
+            <Switch
+              checked={nonDestructiveRecord}
+              onChange={setNonDestructiveRecord}
+              checkedChildren="Non-destructive"
+              unCheckedChildren="Destructive"
+            />
+            {nonDestructiveRecord && (
+              <Typography.Text type="secondary" style={{ fontSize: 12, marginLeft: 10 }}>
+                Specimen retained — quantity will be recorded as 0
+              </Typography.Text>
+            )}
+          </Form.Item>
+
+          {nonDestructiveRecord && (
+            <Form.Item name="destination_tube" label="Destination Tube">
+              <Input placeholder="e.g. AMPH2024-002 or freezer box A1" />
+            </Form.Item>
+          )}
 
           {hasAssociations ? (
             <>

@@ -15,7 +15,9 @@ class TubeUsageLog(Base):
     unit: Mapped[str] = mapped_column(String(50), nullable=False)
     purpose: Mapped[str] = mapped_column(String(200), nullable=True)       # e.g. "DNA extraction", "morphology"
     taken_by_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
-    molecular_ref: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)  # future: Tessera Molecular job ID
+    molecular_ref: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    non_destructive: Mapped[bool] = mapped_column(Integer, default=False, nullable=False, server_default="0")
+    destination_tube: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)  # tube code / location specimen went to
     breakdown: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # JSON: [{label, count}]
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))

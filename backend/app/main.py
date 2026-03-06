@@ -36,6 +36,8 @@ def run_migrations():
             ("specimens", "collection_date_end", "DATE", None),
             ("users", "avatar_filename", "TEXT", None),
             ("sites", "precision", "TEXT", None),
+            ("tube_usage_log", "non_destructive", "INTEGER DEFAULT 0", None),
+            ("tube_usage_log", "destination_tube", "TEXT", None),
             ("sample_types", "is_specimen", "INTEGER DEFAULT 0",
              "UPDATE sample_types SET is_specimen = 1 WHERE name IN ('Voucher Specimens', 'Specimen')"),
         ]

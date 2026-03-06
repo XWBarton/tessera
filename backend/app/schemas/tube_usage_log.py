@@ -16,6 +16,8 @@ class TubeUsageLogCreate(BaseModel):
     unit: str
     purpose: Optional[str] = None
     molecular_ref: Optional[str] = None
+    non_destructive: bool = False
+    destination_tube: Optional[str] = None
     breakdown: Optional[List[BreakdownItem]] = None
     notes: Optional[str] = None
 
@@ -28,6 +30,8 @@ class TubeUsageLogRead(BaseModel):
     unit: str
     purpose: Optional[str] = None
     molecular_ref: Optional[str] = None
+    non_destructive: bool = False
+    destination_tube: Optional[str] = None
     breakdown: Optional[List[BreakdownItem]] = None
     notes: Optional[str] = None
     created_at: datetime

@@ -189,6 +189,8 @@ export interface TubeUsageLog {
   unit: string
   purpose?: string
   molecular_ref?: string
+  non_destructive: boolean
+  destination_tube?: string
   breakdown?: BreakdownItem[]
   notes?: string
   created_at: string
@@ -201,6 +203,8 @@ export interface TubeUsageLogCreate {
   unit: string
   purpose?: string
   molecular_ref?: string
+  non_destructive?: boolean
+  destination_tube?: string
   breakdown?: BreakdownItem[]
   notes?: string
 }
