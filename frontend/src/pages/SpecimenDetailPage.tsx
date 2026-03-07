@@ -660,17 +660,18 @@ export default function SpecimenDetailPage() {
           </Descriptions.Item>
           <Descriptions.Item label="Quantity">
             {hasQuantity ? (
-              <Space direction="vertical" style={{ width: '100%' }}>
-                <span>
-                  <strong>{remaining}</strong> / {total} {specimen.quantity_unit}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'nowrap' }}>
+                <span style={{ whiteSpace: 'nowrap', fontSize: 13 }}>
+                  <strong>{remaining}</strong>
+                  <span style={{ color: '#888' }}> / {total} {specimen.quantity_unit}</span>
                 </span>
                 <Progress
                   percent={pct}
                   size="small"
                   status={progressStatus}
-                  style={{ maxWidth: 200 }}
+                  style={{ flex: 1, minWidth: 80, maxWidth: 160, margin: 0 }}
                 />
-              </Space>
+              </div>
             ) : '—'}
           </Descriptions.Item>
           <Descriptions.Item label="Collection Date">

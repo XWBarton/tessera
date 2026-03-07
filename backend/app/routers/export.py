@@ -1,6 +1,8 @@
 import csv
 import io
+import json
 import os
+import re
 import shutil
 import sqlite3
 import tempfile
@@ -217,14 +219,17 @@ async def restore_backup(
         db_bytes = zf.read("tessera.db")
         _restore_db_bytes(db_bytes, db_path)
 
-        # Restore photos
+        # Restore photos using manifest (maps zip arc -> uuid filename on disk)
+        shutil.rmtree(PHOTO_DIR, ignore_errors=True)
         PHOTO_DIR.mkdir(parents=True, exist_ok=True)
-        photo_entries = [n for n in names if n.startswith("photos/") and not n.endswith("/")]
-        if photo_entries:
-            # Clear existing photos then extract
-            shutil.rmtree(PHOTO_DIR, ignore_errors=True)
-            PHOTO_DIR.mkdir(parents=True, exist_ok=True)
-            for entry in photo_entries:
+        if "photo_manifest.json" in names:
+            manifest = json.loads(zf.read("photo_manifest.json").decode())
+            for arc_name, uuid_name in manifest.items():
+                if arc_name in names:
+                    (PHOTO_DIR / uuid_name).write_bytes(zf.read(arc_name))
+        else:
+            # Legacy backup: files in photos/ already have UUID names
+            for entry in [n for n in names if n.startswith("photos/") and not n.endswith("/")]:
                 rel = entry[len("photos/"):]
                 dest = PHOTO_DIR / rel
                 dest.parent.mkdir(parents=True, exist_ok=True)
@@ -245,8 +250,16 @@ async def restore_backup(
 PHOTO_DIR = Path("/data/photos")
 
 
+def _safe_part(s: str, max_len: int = 60) -> str:
+    """Sanitise a string for use in a filename."""
+    return re.sub(r'[^\w\-.]', '_', s).strip('_')[:max_len]
+
+
 @router.get("/backup")
-def download_backup(_: User = Depends(require_admin)):
+def download_backup(_: User = Depends(require_admin), db: Session = Depends(get_db)):
+    from ..models.specimen_photo import SpecimenPhoto as PhotoModel
+    from ..models.specimen import Specimen as SpecimenModel
+
     db_path = settings.DATABASE_URL.replace("sqlite:///", "")
 
     # Snapshot the database into memory
@@ -254,14 +267,37 @@ def download_backup(_: User = Depends(require_admin)):
     db_bytes = conn.serialize()
     conn.close()
 
-    # Build a ZIP in memory: tessera.db + photos/*
+    # Build a lookup: uuid_filename -> readable zip name
+    photos = (
+        db.query(PhotoModel, SpecimenModel.specimen_code)
+        .join(SpecimenModel, PhotoModel.specimen_id == SpecimenModel.id)
+        .all()
+    )
+    # manifest maps zip arcname -> uuid filename (for restore)
+    manifest: dict[str, str] = {}
+    for photo, specimen_code in photos:
+        ext = Path(photo.original_filename).suffix
+        stem = _safe_part(Path(photo.original_filename).stem)
+        code = _safe_part(specimen_code)
+        cap = ('_' + _safe_part(photo.caption)) if photo.caption else ''
+        arc = f"photos/{code}{cap}_{stem}{ext}"
+        # Deduplicate if two photos produce the same readable name
+        base_arc = arc
+        n = 1
+        while arc in manifest:
+            arc = f"{base_arc[:-len(ext)]}_{n}{ext}"
+            n += 1
+        manifest[arc] = photo.filename
+
+    # Build ZIP in memory
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         zf.writestr("tessera.db", db_bytes)
-        if PHOTO_DIR.exists():
-            for photo_file in PHOTO_DIR.rglob("*"):
-                if photo_file.is_file():
-                    zf.write(photo_file, arcname=f"photos/{photo_file.relative_to(PHOTO_DIR)}")
+        zf.writestr("photo_manifest.json", json.dumps(manifest, indent=2))
+        for arc_name, uuid_name in manifest.items():
+            disk_path = PHOTO_DIR / uuid_name
+            if disk_path.is_file():
+                zf.write(disk_path, arcname=arc_name)
     buf.seek(0)
 
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H%M")
