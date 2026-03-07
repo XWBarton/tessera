@@ -205,15 +205,16 @@ export default function DashboardPage() {
     setDraft((prev) => checked ? [...prev, key] : prev.filter((k) => k !== key))
 
   const renderStat = (key: WidgetKey) => {
+    const s = { height: '100%' }
     switch (key) {
       case 'stat_total_tubes':
-        return <Card><Statistic title="Total Tubes" value={specimensData?.total || 0} prefix={<ExperimentOutlined />} valueStyle={{ color: '#2e7d32' }} /></Card>
+        return <Card style={s}><Statistic title="Total Tubes" value={specimensData?.total || 0} prefix={<ExperimentOutlined />} valueStyle={{ color: '#2e7d32' }} /></Card>
       case 'stat_projects':
-        return <Card><Statistic title="Projects" value={projects?.length || 0} prefix={<ProjectOutlined />} /></Card>
+        return <Card style={s}><Statistic title="Projects" value={projects?.length || 0} prefix={<ProjectOutlined />} /></Card>
       case 'stat_team':
-        return <Card><Statistic title="Team Members" value={users?.length || 0} prefix={<TeamOutlined />} /></Card>
+        return <Card style={s}><Statistic title="Team Members" value={users?.length || 0} prefix={<TeamOutlined />} /></Card>
       case 'stat_this_month':
-        return <Card><Statistic title="Tubes This Month" value={thisMonthCount} prefix={<CalendarOutlined />} valueStyle={{ color: '#1677ff' }} /></Card>
+        return <Card style={s}><Statistic title="Tubes This Month" value={thisMonthCount} prefix={<CalendarOutlined />} valueStyle={{ color: '#1677ff' }} /></Card>
       default: return null
     }
   }
@@ -266,8 +267,8 @@ export default function DashboardPage() {
           {statWidgets.length > 0 && (
             <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
               {statWidgets.map((key) => (
-                <Col key={key} xs={24} sm={statWidgets.length === 1 ? 24 : statSmSpan} md={statMdSpan}>
-                  {renderStat(key)}
+                <Col key={key} xs={24} sm={statWidgets.length === 1 ? 24 : statSmSpan} md={statMdSpan} style={{ display: 'flex' }}>
+                  <div style={{ flex: 1 }}>{renderStat(key)}</div>
                 </Col>
               ))}
             </Row>
