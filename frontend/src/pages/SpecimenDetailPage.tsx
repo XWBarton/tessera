@@ -492,7 +492,12 @@ export default function SpecimenDetailPage() {
         ? <Tag
             icon={<span>→ </span>}
             style={{ cursor: 'pointer' }}
-            onClick={() => navigate(`/specimens?search=${encodeURIComponent(v)}`)}
+            onClick={async () => {
+              const res = await getSpecimens({ search: v, limit: 5 })
+              const match = res.items.find(s => s.specimen_code === v)
+              if (match) navigate(`/specimens/${match.id}`)
+              else navigate(`/specimens?search=${encodeURIComponent(v)}`)
+            }}
           >{v}</Tag>
         : '—',
     },

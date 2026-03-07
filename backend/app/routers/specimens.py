@@ -17,6 +17,7 @@ from ..crud.specimen import (
 )
 from ..crud.project import get_project
 from ..crud.tube_usage_log import get_usage_log, create_usage_event, update_usage_event, delete_usage_event
+from ..models.specimen_species import SpecimenSpecies as SpecimenSpeciesModel
 from ..schemas.specimen import (
     SpecimenDetail, SpecimenCreate, SpecimenUpdate, SpecimenList,
     SpecimenBulkImportRequest, SpecimenBulkImportResult,
@@ -392,10 +393,32 @@ def record_usage(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    from ..models.specimen import Specimen as SpecimenModel
     specimen = get_specimen(db, specimen_id)
     if not specimen:
         raise HTTPException(status_code=404, detail="Specimen not found")
-    return create_usage_event(db, specimen, usage, taken_by_id=current_user.id)
+    entry = create_usage_event(db, specimen, usage, taken_by_id=current_user.id)
+
+    # If non-destructive transfer to an existing destination tube that has no
+    # species associations yet, copy them from the source tube.
+    if usage.non_destructive and usage.destination_tube:
+        dest = db.query(SpecimenModel).filter(
+            SpecimenModel.specimen_code == usage.destination_tube
+        ).first()
+        if dest and not dest.species_associations:
+            for src_assoc in specimen.species_associations:
+                db.add(SpecimenSpeciesModel(
+                    specimen_id=dest.id,
+                    species_id=src_assoc.species_id,
+                    free_text_species=src_assoc.free_text_species,
+                    specimen_count=src_assoc.specimen_count,
+                    life_stage=src_assoc.life_stage,
+                    sex=src_assoc.sex,
+                    confidence=src_assoc.confidence,
+                ))
+            db.commit()
+
+    return entry
 
 
 @router.patch("/{specimen_id}/usage/{entry_id}/ref", response_model=TubeUsageLogRead)
