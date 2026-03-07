@@ -177,6 +177,8 @@ export default function DashboardPage() {
   const [enabled, setEnabled] = useState<WidgetKey[]>(loadEnabled)
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [draft, setDraft] = useState<WidgetKey[]>([])
+  const [dragKey, setDragKey] = useState<WidgetKey | null>(null)
+  const [dragOver, setDragOver] = useState<WidgetKey | null>(null)
 
   const { data: specimensData, isLoading } = useSpecimens({ limit: 1000 })
   const { data: projects } = useProjects()
@@ -194,9 +196,6 @@ export default function DashboardPage() {
 
   const statSmSpan = statWidgets.length >= 3 ? 8 : 12
   const statMdSpan = statWidgets.length === 4 ? 6 : statWidgets.length === 3 ? 8 : statWidgets.length === 2 ? 12 : 24
-
-  const [dragKey, setDragKey] = useState<WidgetKey | null>(null)
-  const [dragOver, setDragOver] = useState<WidgetKey | null>(null)
 
   const openDrawer = () => { setDraft([...enabled]); setDrawerOpen(true) }
   const saveAndClose = () => {
