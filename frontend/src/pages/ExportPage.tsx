@@ -178,19 +178,19 @@ export default function ExportPage() {
               loading={loading}
               onClick={() => handle(() => downloadBackup())}
             >
-              Download Backup (.db)
+              Download Backup (.zip)
             </Button>
           </Card>
           <Card title="Restore from Backup" style={{ borderColor: '#ff4d4f' }}>
             <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 4 }}>
-              Upload a previously downloaded <code>.db</code> backup file to restore all data.
+              Upload a <code>.zip</code> backup (includes photos) or a legacy <code>.db</code> backup to restore all data.
             </Typography.Text>
             <Typography.Text type="danger" style={{ display: 'block', marginBottom: 12 }}>
               Warning: this permanently replaces all current data.
             </Typography.Text>
             <Space>
               <Upload
-                accept=".db"
+                accept=".zip,.db"
                 maxCount={1}
                 fileList={restoreFileList}
                 beforeUpload={(file) => {

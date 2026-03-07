@@ -4,7 +4,9 @@ import os
 import shutil
 import sqlite3
 import tempfile
+import zipfile
 from datetime import datetime, timezone
+from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
@@ -153,28 +155,14 @@ def export_by_species(
     )
 
 
-@router.post("/restore")
-async def restore_backup(
-    file: UploadFile,
-    _: User = Depends(require_admin),
-):
+def _restore_db_bytes(db_bytes: bytes, db_path: str) -> None:
+    """Write db_bytes into the live SQLite file using the backup API."""
     from ..database import engine
 
-    db_path = settings.DATABASE_URL.replace("sqlite:///", "")
-    data = await file.read()
-
-    # Validate SQLite magic bytes
-    if not data.startswith(b"SQLite format 3\x00"):
-        raise HTTPException(
-            status_code=400,
-            detail="File does not appear to be a valid SQLite database.",
-        )
-
-    # Write to a temp file and verify it opens cleanly
     tmp_fd, tmp_path = tempfile.mkstemp(suffix=".db")
     try:
         with os.fdopen(tmp_fd, "wb") as f:
-            f.write(data)
+            f.write(db_bytes)
         test_conn = sqlite3.connect(tmp_path)
         try:
             test_conn.execute("SELECT name FROM sqlite_master LIMIT 1").fetchall()
@@ -187,12 +175,7 @@ async def restore_backup(
             pass
         raise HTTPException(status_code=400, detail=f"Invalid database file: {exc}")
 
-    # Close all pooled connections
     engine.dispose()
-
-    # Use SQLite's own backup API to write restored data into the live file.
-    # This correctly handles WAL mode — a plain file swap leaves the old
-    # -wal/-shm files which SQLite would re-apply on next open, losing the restore.
     try:
         src = sqlite3.connect(tmp_path)
         dst = sqlite3.connect(db_path)
@@ -209,23 +192,82 @@ async def restore_backup(
         except OSError:
             pass
 
-    return {"status": "ok", "message": "Database restored. Please refresh the application."}
+
+@router.post("/restore")
+async def restore_backup(
+    file: UploadFile,
+    _: User = Depends(require_admin),
+):
+    db_path = settings.DATABASE_URL.replace("sqlite:///", "")
+    data = await file.read()
+
+    is_zip = data[:4] == b"PK\x03\x04"
+    is_sqlite = data.startswith(b"SQLite format 3\x00")
+
+    if is_zip:
+        try:
+            zf = zipfile.ZipFile(io.BytesIO(data))
+        except zipfile.BadZipFile:
+            raise HTTPException(status_code=400, detail="Invalid ZIP file.")
+
+        names = zf.namelist()
+        if "tessera.db" not in names:
+            raise HTTPException(status_code=400, detail="ZIP does not contain tessera.db.")
+
+        db_bytes = zf.read("tessera.db")
+        _restore_db_bytes(db_bytes, db_path)
+
+        # Restore photos
+        PHOTO_DIR.mkdir(parents=True, exist_ok=True)
+        photo_entries = [n for n in names if n.startswith("photos/") and not n.endswith("/")]
+        if photo_entries:
+            # Clear existing photos then extract
+            shutil.rmtree(PHOTO_DIR, ignore_errors=True)
+            PHOTO_DIR.mkdir(parents=True, exist_ok=True)
+            for entry in photo_entries:
+                rel = entry[len("photos/"):]
+                dest = PHOTO_DIR / rel
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                dest.write_bytes(zf.read(entry))
+
+    elif is_sqlite:
+        # Legacy plain .db restore (no photos)
+        _restore_db_bytes(data, db_path)
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="File must be a Tessera backup ZIP or a raw SQLite .db file.",
+        )
+
+    return {"status": "ok", "message": "Backup restored. Please refresh the application."}
+
+
+PHOTO_DIR = Path("/data/photos")
 
 
 @router.get("/backup")
 def download_backup(_: User = Depends(require_admin)):
-    # Strip "sqlite:///" prefix to get the file path (/data/tessera.db)
     db_path = settings.DATABASE_URL.replace("sqlite:///", "")
 
-    # serialize() creates a consistent in-memory snapshot safe to read during writes
+    # Snapshot the database into memory
     conn = sqlite3.connect(db_path)
-    data = conn.serialize()
+    db_bytes = conn.serialize()
     conn.close()
 
+    # Build a ZIP in memory: tessera.db + photos/*
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("tessera.db", db_bytes)
+        if PHOTO_DIR.exists():
+            for photo_file in PHOTO_DIR.rglob("*"):
+                if photo_file.is_file():
+                    zf.write(photo_file, arcname=f"photos/{photo_file.relative_to(PHOTO_DIR)}")
+    buf.seek(0)
+
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H%M")
-    filename = f"tessera_backup_{timestamp}.db"
+    filename = f"tessera_backup_{timestamp}.zip"
     return StreamingResponse(
-        io.BytesIO(data),
-        media_type="application/octet-stream",
+        buf,
+        media_type="application/zip",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
