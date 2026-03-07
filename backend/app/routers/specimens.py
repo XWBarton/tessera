@@ -399,23 +399,47 @@ def record_usage(
         raise HTTPException(status_code=404, detail="Specimen not found")
     entry = create_usage_event(db, specimen, usage, taken_by_id=current_user.id)
 
-    # If non-destructive transfer to an existing destination tube that has no
-    # species associations yet, copy them from the source tube.
+    # If non-destructive transfer to an existing destination tube, copy
+    # collection metadata and species that are missing from the destination.
     if usage.non_destructive and usage.destination_tube:
         dest = db.query(SpecimenModel).filter(
             SpecimenModel.specimen_code == usage.destination_tube
         ).first()
-        if dest and not dest.species_associations:
-            for src_assoc in specimen.species_associations:
-                db.add(SpecimenSpeciesModel(
-                    specimen_id=dest.id,
-                    species_id=src_assoc.species_id,
-                    free_text_species=src_assoc.free_text_species,
-                    specimen_count=src_assoc.specimen_count,
-                    life_stage=src_assoc.life_stage,
-                    sex=src_assoc.sex,
-                    confidence=src_assoc.confidence,
-                ))
+        if dest:
+            # Copy collection metadata only where destination fields are blank
+            if dest.collection_date is None and specimen.collection_date:
+                dest.collection_date = specimen.collection_date
+            if dest.collection_date_end is None and specimen.collection_date_end:
+                dest.collection_date_end = specimen.collection_date_end
+            if dest.collector_id is None and dest.collector_name is None:
+                dest.collector_id = specimen.collector_id
+                dest.collector_name = specimen.collector_name
+            if dest.collection_lat is None and specimen.collection_lat is not None:
+                dest.collection_lat = specimen.collection_lat
+                dest.collection_lon = specimen.collection_lon
+            if dest.collection_location_text is None and specimen.collection_location_text:
+                dest.collection_location_text = specimen.collection_location_text
+            if dest.sample_type_id is None and specimen.sample_type_id:
+                dest.sample_type_id = specimen.sample_type_id
+            if dest.quantity_unit is None and specimen.quantity_unit:
+                dest.quantity_unit = specimen.quantity_unit
+            # Copy sites that aren't already on the destination
+            existing_site_ids = {s.id for s in dest.sites}
+            for site in specimen.sites:
+                if site.id not in existing_site_ids:
+                    dest.sites.append(site)
+            # Copy species associations if destination has none
+            if not dest.species_associations:
+                for src_assoc in specimen.species_associations:
+                    db.add(SpecimenSpeciesModel(
+                        specimen_id=dest.id,
+                        species_id=src_assoc.species_id,
+                        free_text_species=src_assoc.free_text_species,
+                        specimen_count=src_assoc.specimen_count,
+                        life_stage=src_assoc.life_stage,
+                        sex=src_assoc.sex,
+                        confidence=src_assoc.confidence,
+                    ))
             db.commit()
 
     return entry
