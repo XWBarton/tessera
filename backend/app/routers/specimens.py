@@ -421,8 +421,12 @@ def record_usage(
                 dest.collection_location_text = specimen.collection_location_text
             if dest.sample_type_id is None and specimen.sample_type_id:
                 dest.sample_type_id = specimen.sample_type_id
-            if dest.quantity_unit is None and specimen.quantity_unit:
-                dest.quantity_unit = specimen.quantity_unit
+            if dest.quantity_unit is None and usage.unit:
+                dest.quantity_unit = usage.unit
+            # Initialise quantity on the destination from the transferred amount
+            if dest.quantity_value is None and usage.quantity_taken:
+                dest.quantity_value = usage.quantity_taken
+                dest.quantity_remaining = usage.quantity_taken
             # Copy sites that aren't already on the destination
             existing_site_ids = {s.id for s in dest.sites}
             for site in specimen.sites:
