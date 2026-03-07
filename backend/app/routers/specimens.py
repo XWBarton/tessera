@@ -428,14 +428,36 @@ def record_usage(
             for site in specimen.sites:
                 if site.id not in existing_site_ids:
                     dest.sites.append(site)
-            # Copy species associations if destination has none
+            # Copy only the transferred species to the destination.
+            # Use breakdown counts when available (tells us exactly which
+            # species and how many moved). Fall back to the single species
+            # if there's only one and no breakdown.
             if not dest.species_associations:
-                for src_assoc in specimen.species_associations:
+                def _assoc_label(a) -> str:
+                    name = (a.species.scientific_name if a.species else None) or a.free_text_species or 'Unknown'
+                    return ' '.join(p for p in [name, a.life_stage, a.sex] if p)
+
+                if usage.breakdown:
+                    breakdown_map = {item.label: item.count for item in usage.breakdown}
+                    for src_assoc in specimen.species_associations:
+                        label = _assoc_label(src_assoc)
+                        if label in breakdown_map:
+                            db.add(SpecimenSpeciesModel(
+                                specimen_id=dest.id,
+                                species_id=src_assoc.species_id,
+                                free_text_species=src_assoc.free_text_species,
+                                specimen_count=breakdown_map[label],
+                                life_stage=src_assoc.life_stage,
+                                sex=src_assoc.sex,
+                                confidence=src_assoc.confidence,
+                            ))
+                elif len(specimen.species_associations) == 1:
+                    src_assoc = specimen.species_associations[0]
                     db.add(SpecimenSpeciesModel(
                         specimen_id=dest.id,
                         species_id=src_assoc.species_id,
                         free_text_species=src_assoc.free_text_species,
-                        specimen_count=src_assoc.specimen_count,
+                        specimen_count=int(usage.quantity_taken) if usage.quantity_taken else src_assoc.specimen_count,
                         life_stage=src_assoc.life_stage,
                         sex=src_assoc.sex,
                         confidence=src_assoc.confidence,
