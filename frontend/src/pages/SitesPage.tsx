@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Typography, Table, Button, Modal, Form, Input, InputNumber, Space, message, Popconfirm, Tag, Select, Drawer, Spin, Tabs } from 'antd'
-import { PlusOutlined, DeleteOutlined, EditOutlined } from '@ant-design/icons'
+import { PlusOutlined, DeleteOutlined, EditOutlined, CopyOutlined } from '@ant-design/icons'
 import { MapContainer, TileLayer, LayersControl, CircleMarker, Circle, useMap } from 'react-leaflet'
 import { useSites, useCreateSite, useUpdateSite, useDeleteSite, useSiteSpecimens } from '../hooks/useSites'
 import { useAuth } from '../context/AuthContext'
@@ -277,7 +277,22 @@ export default function SitesPage() {
     {
       title: 'Coordinates',
       key: 'coords',
-      render: (_: unknown, r: Site) => r.lat != null ? `${r.lat}, ${r.lon}` : '—',
+      render: (_: unknown, r: Site) => r.lat != null ? (
+        <Space size={4}>
+          <span style={{ fontVariantNumeric: 'tabular-nums', fontSize: 13 }}>{r.lat}, {r.lon}</span>
+          <Button
+            type="text"
+            size="small"
+            icon={<CopyOutlined />}
+            style={{ color: '#aaa', padding: '0 2px' }}
+            onClick={(e) => {
+              e.stopPropagation()
+              navigator.clipboard.writeText(`${r.lat}, ${r.lon}`)
+              message.success('Copied to clipboard')
+            }}
+          />
+        </Space>
+      ) : '—',
     },
     {
       title: 'Description',
