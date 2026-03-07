@@ -7,7 +7,28 @@ from ..schemas.specimen import SpecimenDetail
 from ..models.user import User
 from ..models.specimen import Specimen
 from ..models.specimen_species import SpecimenSpecies
+from pydantic import BaseModel
 from typing import List, Optional
+
+
+class SiteBulkImportRow(BaseModel):
+    name: str
+    description: Optional[str] = None
+    habitat_type: Optional[str] = None
+    lat: Optional[float] = None
+    lon: Optional[float] = None
+    precision: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class SiteBulkImportRequest(BaseModel):
+    rows: List[SiteBulkImportRow]
+
+
+class SiteBulkImportResult(BaseModel):
+    created: int
+    skipped: int
+    errors: List[str]
 
 router = APIRouter(prefix="/sites", tags=["sites"])
 
@@ -23,6 +44,38 @@ def list_sites(
     if q is not None:
         return search_sites(db, q, skip, limit)
     return get_all_sites(db, skip, limit)
+
+
+@router.post("/bulk-import", response_model=SiteBulkImportResult)
+def bulk_import_sites(
+    body: SiteBulkImportRequest,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    created = 0
+    skipped = 0
+    errors: List[str] = []
+    for row in body.rows:
+        if not row.name:
+            errors.append("Row skipped: name is required")
+            continue
+        try:
+            if get_site_by_name(db, row.name):
+                skipped += 1
+                continue
+            create_site(db, SiteCreate(
+                name=row.name,
+                description=row.description,
+                habitat_type=row.habitat_type,
+                lat=row.lat,
+                lon=row.lon,
+                precision=row.precision,
+                notes=row.notes,
+            ))
+            created += 1
+        except Exception as e:
+            errors.append(f"{row.name}: {e}")
+    return {"created": created, "skipped": skipped, "errors": errors}
 
 
 @router.post("/", response_model=SiteRead)

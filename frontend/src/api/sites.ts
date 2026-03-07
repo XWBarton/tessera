@@ -22,6 +22,27 @@ export const deleteSite = async (id: number): Promise<void> => {
   await apiClient.delete(`/sites/${id}`)
 }
 
+export interface SiteBulkImportRow {
+  name: string
+  description?: string
+  habitat_type?: string
+  lat?: number
+  lon?: number
+  precision?: string
+  notes?: string
+}
+
+export interface SiteBulkImportResult {
+  created: number
+  skipped: number
+  errors: string[]
+}
+
+export const bulkImportSites = async (rows: SiteBulkImportRow[]): Promise<SiteBulkImportResult> => {
+  const { data } = await apiClient.post<SiteBulkImportResult>('/sites/bulk-import', { rows })
+  return data
+}
+
 export const getSiteSpecimens = async (siteId: number): Promise<Specimen[]> => {
   const { data } = await apiClient.get<Specimen[]>(`/sites/${siteId}/specimens`)
   return data
