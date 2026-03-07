@@ -1,11 +1,11 @@
-import { useState, useMemo, type ReactNode } from 'react'
+import React, { useState, useMemo, type ReactNode } from 'react'
 import {
   Row, Col, Card, Statistic, Typography, Spin,
   Button, Drawer, Checkbox, Table, Tag, Progress,
 } from 'antd'
 import {
   ExperimentOutlined, ProjectOutlined, TeamOutlined, CalendarOutlined,
-  SettingOutlined,
+  SettingOutlined, HolderOutlined,
 } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import {
@@ -188,12 +188,15 @@ export default function DashboardPage() {
   const thisMonth = new Date().toISOString().substring(0, 7)
   const thisMonthCount = specimens.filter((s) => s.collection_date?.startsWith(thisMonth)).length
 
-  const statWidgets = WIDGETS.filter((w) => w.type === 'stat' && enabled.includes(w.key)).map((w) => w.key)
-  const halfWidgets = WIDGETS.filter((w) => w.type === 'half' && enabled.includes(w.key)).map((w) => w.key)
-  const fullWidgets = WIDGETS.filter((w) => w.type === 'full' && enabled.includes(w.key)).map((w) => w.key)
+  const statWidgets = enabled.filter((k) => WIDGETS.find((w) => w.key === k && w.type === 'stat'))
+  const halfWidgets = enabled.filter((k) => WIDGETS.find((w) => w.key === k && w.type === 'half'))
+  const fullWidgets = enabled.filter((k) => WIDGETS.find((w) => w.key === k && w.type === 'full'))
 
   const statSmSpan = statWidgets.length >= 3 ? 8 : 12
   const statMdSpan = statWidgets.length === 4 ? 6 : statWidgets.length === 3 ? 8 : statWidgets.length === 2 ? 12 : 24
+
+  const [dragKey, setDragKey] = useState<WidgetKey | null>(null)
+  const [dragOver, setDragOver] = useState<WidgetKey | null>(null)
 
   const openDrawer = () => { setDraft([...enabled]); setDrawerOpen(true) }
   const saveAndClose = () => {
@@ -201,8 +204,50 @@ export default function DashboardPage() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(draft))
     setDrawerOpen(false)
   }
-  const toggleDraft = (key: WidgetKey, checked: boolean) =>
-    setDraft((prev) => checked ? [...prev, key] : prev.filter((k) => k !== key))
+
+  const toggleDraft = (key: WidgetKey, checked: boolean) => {
+    if (checked) {
+      setDraft((prev) => {
+        const group = WIDGETS.find((w) => w.key === key)?.group
+        const groupKeys = WIDGETS.filter((w) => w.group === group).map((w) => w.key)
+        let insertIdx = prev.length
+        for (let i = prev.length - 1; i >= 0; i--) {
+          if (groupKeys.includes(prev[i])) { insertIdx = i + 1; break }
+        }
+        const next = [...prev]
+        next.splice(insertIdx, 0, key)
+        return next
+      })
+    } else {
+      setDraft((prev) => prev.filter((k) => k !== key))
+    }
+  }
+
+  const handleDragStart = (e: React.DragEvent, key: WidgetKey) => {
+    e.dataTransfer.effectAllowed = 'move'
+    setDragKey(key)
+  }
+  const handleDragOver = (e: React.DragEvent, key: WidgetKey) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    if (dragOver !== key) setDragOver(key)
+  }
+  const handleDrop = (e: React.DragEvent, targetKey: WidgetKey) => {
+    e.preventDefault()
+    if (!dragKey || dragKey === targetKey) { setDragKey(null); setDragOver(null); return }
+    setDraft((prev) => {
+      const fromIdx = prev.indexOf(dragKey)
+      const toIdx = prev.indexOf(targetKey)
+      if (fromIdx === -1 || toIdx === -1) return prev
+      const next = [...prev]
+      next.splice(fromIdx, 1)
+      next.splice(toIdx, 0, dragKey)
+      return next
+    })
+    setDragKey(null)
+    setDragOver(null)
+  }
+  const handleDragEnd = () => { setDragKey(null); setDragOver(null) }
 
   const renderStat = (key: WidgetKey) => {
     const s = { height: '100%' }
@@ -302,23 +347,59 @@ export default function DashboardPage() {
           </div>
         }
       >
-        {groups.map((group, gi) => (
-          <div key={group} style={{ marginBottom: 20 }}>
-            <Typography.Text strong style={{ display: 'block', marginBottom: 10 }}>{group}</Typography.Text>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {WIDGETS.filter((w) => w.group === group).map((w) => (
-                <Checkbox
-                  key={w.key}
-                  checked={draft.includes(w.key)}
-                  onChange={(e) => toggleDraft(w.key, e.target.checked)}
-                >
-                  {w.title}
-                </Checkbox>
-              ))}
+        <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 12 }}>
+          Drag enabled widgets to reorder them.
+        </Typography.Text>
+        {groups.map((group, gi) => {
+          const groupKeys = WIDGETS.filter((w) => w.group === group).map((w) => w.key)
+          const enabledInGroup = draft.filter((k) => groupKeys.includes(k))
+          const disabledInGroup = groupKeys.filter((k) => !draft.includes(k))
+          const ordered = [...enabledInGroup, ...disabledInGroup]
+          return (
+            <div key={group} style={{ marginBottom: 20 }}>
+              <Typography.Text strong style={{ display: 'block', marginBottom: 8 }}>{group}</Typography.Text>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                {ordered.map((key) => {
+                  const isEnabled = draft.includes(key)
+                  const isDragging = dragKey === key
+                  const isOver = dragOver === key
+                  const title = WIDGETS.find((w) => w.key === key)?.title || ''
+                  return (
+                    <div
+                      key={key}
+                      draggable={isEnabled}
+                      onDragStart={isEnabled ? (e) => handleDragStart(e, key) : undefined}
+                      onDragOver={isEnabled ? (e) => handleDragOver(e, key) : undefined}
+                      onDrop={isEnabled ? (e) => handleDrop(e, key) : undefined}
+                      onDragEnd={handleDragEnd}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        padding: '6px 8px',
+                        borderRadius: 6,
+                        background: isDragging ? '#f5f5f5' : isOver ? '#e6f4ff' : 'transparent',
+                        border: `1px solid ${isOver ? '#1677ff' : 'transparent'}`,
+                        opacity: isDragging ? 0.4 : 1,
+                        cursor: isEnabled ? 'grab' : 'default',
+                        userSelect: 'none',
+                      }}
+                    >
+                      <HolderOutlined style={{ color: isEnabled ? '#bbb' : 'transparent', fontSize: 14, flexShrink: 0 }} />
+                      <Checkbox
+                        checked={isEnabled}
+                        onChange={(e) => toggleDraft(key, e.target.checked)}
+                      >
+                        {title}
+                      </Checkbox>
+                    </div>
+                  )
+                })}
+              </div>
+              {gi < groups.length - 1 && <div style={{ borderBottom: '1px solid #f0f0f0', marginTop: 14 }} />}
             </div>
-            {gi < groups.length - 1 && <div style={{ borderBottom: '1px solid #f0f0f0', marginTop: 16 }} />}
-          </div>
-        ))}
+          )
+        })}
         <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
           <Button size="small" onClick={() => setDraft(WIDGETS.map((w) => w.key))}>Select All</Button>
           <Button size="small" onClick={() => setDraft([])}>Clear All</Button>
