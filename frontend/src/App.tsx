@@ -16,6 +16,7 @@ import MapPage from './pages/MapPage'
 import SitesPage from './pages/SitesPage'
 import SpeciesPage from './pages/SpeciesPage'
 import TimelinePage from './pages/TimelinePage'
+import ExplorePage from './pages/ExplorePage'
 import ExportPage from './pages/ExportPage'
 import AdminPage from './pages/AdminPage'
 import BulkImportPage from './pages/BulkImportPage'
@@ -45,10 +46,11 @@ function App() {
           <Route path="specimens/:id/edit" element={<SpecimenFormPage />} />
           <Route path="projects" element={<ProjectsPage />} />
           <Route path="projects/:id" element={<ProjectDetailPage />} />
-          <Route path="map" element={<MapPage />} />
+          <Route path="explore" element={<ExplorePage />} />
+          <Route path="map" element={<Navigate to="/explore" replace />} />
+          <Route path="timeline" element={<Navigate to="/explore" replace />} />
           <Route path="sites" element={<SitesPage />} />
           <Route path="species" element={<SpeciesPage />} />
-          <Route path="timeline" element={<TimelinePage />} />
           <Route path="export" element={<ExportPage />} />
           <Route
             path="admin"

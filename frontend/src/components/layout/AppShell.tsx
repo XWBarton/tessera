@@ -8,7 +8,7 @@ import {
   EnvironmentOutlined,
   PushpinOutlined,
   BugOutlined,
-  FieldTimeOutlined,
+  CompassOutlined,
   ExportOutlined,
   SettingOutlined,
   LogoutOutlined,
@@ -26,9 +26,8 @@ const menuItems = [
   { key: '/specimens', icon: <ExperimentOutlined />, label: 'Tubes' },
   { key: '/projects', icon: <ProjectOutlined />, label: 'Projects' },
   { key: '/species', icon: <BugOutlined />, label: 'Species' },
-  { key: '/map', icon: <EnvironmentOutlined />, label: 'Map' },
+  { key: '/explore', icon: <CompassOutlined />, label: 'Explore' },
   { key: '/sites', icon: <PushpinOutlined />, label: 'Sites' },
-  { key: '/timeline', icon: <FieldTimeOutlined />, label: 'Timeline' },
   { key: '/export', icon: <ExportOutlined />, label: 'Export' },
 ]
 
