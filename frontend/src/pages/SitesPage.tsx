@@ -264,6 +264,7 @@ export default function SitesPage() {
       title: 'Precision',
       dataIndex: 'precision',
       key: 'precision',
+      width: 110,
       render: (v: string) => v
         ? <Tag color={PRECISION_COLORS[v] || 'default'}>{v}</Tag>
         : <span style={{ color: '#bbb' }}>—</span>,
@@ -279,7 +280,7 @@ export default function SitesPage() {
       key: 'coords',
       render: (_: unknown, r: Site) => r.lat != null ? (
         <Space size={4}>
-          <span style={{ fontVariantNumeric: 'tabular-nums', fontSize: 13 }}>{r.lat}, {r.lon}</span>
+          <span style={{ fontVariantNumeric: 'tabular-nums', fontSize: 13, whiteSpace: 'nowrap' }}>{r.lat}, {r.lon}</span>
           <Button
             type="text"
             size="small"
