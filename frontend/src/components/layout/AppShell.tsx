@@ -14,6 +14,7 @@ import {
   LogoutOutlined,
   UserOutlined,
   ImportOutlined,
+  QuestionCircleOutlined,
 } from '@ant-design/icons'
 import { useAuth } from '../../context/AuthContext'
 import { uploadAvatar, getAvatarBlob } from '../../api/users'
@@ -34,6 +35,10 @@ const menuItems = [
 const adminItems = [
   { key: '/import', icon: <ImportOutlined />, label: 'Bulk Import' },
   { key: '/admin', icon: <SettingOutlined />, label: 'Settings' },
+]
+
+const bottomItems = [
+  { key: '/help', icon: <QuestionCircleOutlined />, label: 'Help' },
 ]
 
 export default function AppShell() {
@@ -69,13 +74,13 @@ export default function AppShell() {
   const allItems = user?.is_admin ? [...menuItems, ...adminItems] : menuItems
 
   const selectedKey =
-    allItems.find((item) => location.pathname.startsWith(item.key))?.key || '/dashboard'
+    [...allItems, ...bottomItems].find((item) => location.pathname.startsWith(item.key))?.key || '/dashboard'
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
       <Sider
         width={220}
-        style={{ background: '#fff', borderRight: '1px solid #f0f0f0' }}
+        style={{ background: '#fff', borderRight: '1px solid #f0f0f0', display: 'flex', flexDirection: 'column' }}
       >
         <div
           style={{
@@ -96,12 +101,21 @@ export default function AppShell() {
             Specimen Tracking
           </Text>
         </div>
+        <div style={{ flex: 1, overflowY: 'auto' }}>
+          <Menu
+            mode="inline"
+            selectedKeys={[selectedKey]}
+            items={allItems}
+            onClick={({ key }) => navigate(key)}
+            style={{ borderRight: 0, marginTop: 8 }}
+          />
+        </div>
         <Menu
           mode="inline"
           selectedKeys={[selectedKey]}
-          items={allItems}
+          items={bottomItems}
           onClick={({ key }) => navigate(key)}
-          style={{ borderRight: 0, marginTop: 8 }}
+          style={{ borderRight: 0, borderTop: '1px solid #f0f0f0' }}
         />
       </Sider>
       <Layout>

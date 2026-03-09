@@ -21,6 +21,7 @@ import ExportPage from './pages/ExportPage'
 import AdminPage from './pages/AdminPage'
 import BulkImportPage from './pages/BulkImportPage'
 import FindSpecimenPage from './pages/FindSpecimenPage'
+import HelpPage from './pages/HelpPage'
 
 function App() {
   return (
@@ -52,6 +53,7 @@ function App() {
           <Route path="sites" element={<SitesPage />} />
           <Route path="species" element={<SpeciesPage />} />
           <Route path="export" element={<ExportPage />} />
+          <Route path="help" element={<HelpPage />} />
           <Route
             path="admin"
             element={
