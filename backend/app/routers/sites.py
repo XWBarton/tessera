@@ -107,7 +107,7 @@ def update_existing_site(
     site_id: int,
     site_update: SiteUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_admin),
+    _: User = Depends(get_current_user),
 ):
     site = get_site(db, site_id)
     if not site:

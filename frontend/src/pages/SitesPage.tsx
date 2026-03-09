@@ -322,27 +322,29 @@ export default function SitesPage() {
       ellipsis: true,
       render: (v: string) => v || '—',
     },
-    ...(user?.is_admin ? [{
+    {
       title: '',
       key: 'actions',
       width: 100,
       render: (_: unknown, record: Site) => (
         <Space>
           <Button icon={<EditOutlined />} size="small" onClick={(e) => { e.stopPropagation(); setEditingSite(record) }} />
-          <Popconfirm
-            title="Delete this site?"
-            onConfirm={() =>
-              deleteSite
-                .mutateAsync(record.id)
-                .then(() => message.success('Deleted'))
-                .catch(() => message.error('Failed to delete'))
-            }
-          >
-            <Button icon={<DeleteOutlined />} size="small" danger onClick={(e) => e.stopPropagation()} />
-          </Popconfirm>
+          {user?.is_admin && (
+            <Popconfirm
+              title="Delete this site?"
+              onConfirm={() =>
+                deleteSite
+                  .mutateAsync(record.id)
+                  .then(() => message.success('Deleted'))
+                  .catch(() => message.error('Failed to delete'))
+              }
+            >
+              <Button icon={<DeleteOutlined />} size="small" danger onClick={(e) => e.stopPropagation()} />
+            </Popconfirm>
+          )}
         </Space>
       ),
-    }] : []),
+    },
   ]
 
   return (
