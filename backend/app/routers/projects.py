@@ -56,7 +56,7 @@ def update_existing_project(
     project_id: int,
     project_update: ProjectUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_admin),
 ):
     project = get_project(db, project_id)
     if not project:

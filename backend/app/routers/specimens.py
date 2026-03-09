@@ -53,6 +53,7 @@ from datetime import date, date as date_type
 
 PHOTO_DIR = Path("/data/photos")
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic", ".heif", ".tiff", ".tif"}
+MAX_PHOTO_SIZE_BYTES = 20 * 1024 * 1024  # 20 MB
 
 router = APIRouter(prefix="/specimens", tags=["specimens"])
 
@@ -359,11 +360,13 @@ def get_specimen_label(
     format: str = "zpl",
     template: str = "standard",
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     specimen = get_specimen(db, specimen_id)
     if not specimen:
         raise HTTPException(status_code=404, detail="Specimen not found")
+    if not _has_access(specimen.project, current_user):
+        raise HTTPException(status_code=403, detail="Access restricted")
 
     if format == "zpl":
         content = _generate_zpl_label(specimen, template)
@@ -438,11 +441,13 @@ def unlink_elementa_run(
 def list_usage_log(
     specimen_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     specimen = get_specimen(db, specimen_id)
     if not specimen:
         raise HTTPException(status_code=404, detail="Specimen not found")
+    if not _has_access(specimen.project, current_user):
+        raise HTTPException(status_code=403, detail="Access restricted")
     return get_usage_log(db, specimen_id)
 
 
@@ -457,6 +462,8 @@ def record_usage(
     specimen = get_specimen(db, specimen_id)
     if not specimen:
         raise HTTPException(status_code=404, detail="Specimen not found")
+    if not _has_access(specimen.project, current_user):
+        raise HTTPException(status_code=403, detail="Access restricted")
     entry = create_usage_event(db, specimen, usage, taken_by_id=current_user.id)
 
     # If non-destructive transfer to an existing destination tube, copy
@@ -751,11 +758,13 @@ def bulk_label(
 def list_photos(
     specimen_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     specimen = get_specimen(db, specimen_id)
     if not specimen:
         raise HTTPException(status_code=404, detail="Specimen not found")
+    if not _has_access(specimen.project, current_user):
+        raise HTTPException(status_code=403, detail="Access restricted")
     return (
         db.query(SpecimenPhoto)
         .options(joinedload(SpecimenPhoto.uploaded_by))
@@ -776,6 +785,8 @@ async def upload_photo(
     specimen = get_specimen(db, specimen_id)
     if not specimen:
         raise HTTPException(status_code=404, detail="Specimen not found")
+    if not _has_access(specimen.project, current_user):
+        raise HTTPException(status_code=403, detail="Access restricted")
 
     ext = Path(file.filename or "").suffix.lower()
     if ext not in ALLOWED_EXTENSIONS:
@@ -789,6 +800,11 @@ async def upload_photo(
     file_path = PHOTO_DIR / stored_name
 
     content = await file.read()
+    if len(content) > MAX_PHOTO_SIZE_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large. Maximum size is {MAX_PHOTO_SIZE_BYTES // (1024 * 1024)} MB",
+        )
     with open(file_path, "wb") as f:
         f.write(content)
 

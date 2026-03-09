@@ -16,6 +16,11 @@ class Settings(BaseSettings):
 
     APP_VERSION: str = "1.0.0"
 
+    # Comma-separated list of allowed CORS origins.
+    # Example: CORS_ORIGINS=https://my-lab.example.com,https://tessera.example.com
+    # Leave empty to restrict to localhost only (safe for local Docker deployments).
+    CORS_ORIGINS: str = ""
+
     # Optional URL of a companion Elementa LIMS instance.
     # When set, Mol. Ref values in usage logs will be rendered as clickable links.
     # Example: ELEMENTA_URL=http://your-server:8001
