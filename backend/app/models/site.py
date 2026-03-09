@@ -1,7 +1,14 @@
 from datetime import datetime, timezone
-from sqlalchemy import DateTime, Float, Integer, String, Text
+from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, String, Table, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from ..database import Base
+
+site_projects_table = Table(
+    "site_projects",
+    Base.metadata,
+    Column("site_id", Integer, ForeignKey("sites.id", ondelete="CASCADE"), primary_key=True),
+    Column("project_id", Integer, ForeignKey("projects.id", ondelete="CASCADE"), primary_key=True),
+)
 
 
 class Site(Base):
@@ -18,3 +25,4 @@ class Site(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     specimens = relationship("Specimen", back_populates="site")
+    projects = relationship("Project", secondary=site_projects_table, lazy="joined")

@@ -4,6 +4,7 @@ import { Typography, Table, Button, Modal, Form, Input, InputNumber, Space, mess
 import { PlusOutlined, DeleteOutlined, EditOutlined, CopyOutlined } from '@ant-design/icons'
 import { MapContainer, TileLayer, LayersControl, CircleMarker, Circle, useMap } from 'react-leaflet'
 import { useSites, useCreateSite, useUpdateSite, useDeleteSite, useSiteSpecimens } from '../hooks/useSites'
+import { useProjects } from '../hooks/useProjects'
 import { useAuth } from '../context/AuthContext'
 import type { Site, Specimen } from '../types'
 import 'leaflet/dist/leaflet.css'
@@ -42,14 +43,23 @@ const PRECISION_ZOOM: Record<string, number> = {
 function SiteForm({ onFinish, loading, initialValues }: {
   onFinish: (values: Record<string, unknown>) => void
   loading: boolean
-  initialValues?: Partial<Site>
+  initialValues?: Partial<Site> & { project_ids?: number[] }
 }) {
   const [form] = Form.useForm()
+  const { data: projects } = useProjects()
 
   return (
     <Form form={form} layout="vertical" onFinish={onFinish} initialValues={initialValues}>
       <Form.Item name="name" label="Site Name" rules={[{ required: true }]}>
         <Input placeholder="e.g. Wetlands Reserve North" />
+      </Form.Item>
+      <Form.Item name="project_ids" label="Associated Projects">
+        <Select
+          mode="multiple"
+          placeholder="Tag with one or more projects (optional)"
+          allowClear
+          options={projects?.map((p) => ({ value: p.id, label: `${p.code} — ${p.name}` }))}
+        />
       </Form.Item>
       <Form.Item name="precision" label="Location Precision">
         <Select placeholder="Select precision level" options={PRECISION_OPTIONS} allowClear />
@@ -220,7 +230,9 @@ function SiteSpecimensDrawer({ site, onClose }: { site: Site; onClose: () => voi
 
 export default function SitesPage() {
   const { user } = useAuth()
-  const { data: sites, isLoading } = useSites()
+  const [projectFilter, setProjectFilter] = useState<number | undefined>(undefined)
+  const { data: sites, isLoading } = useSites(projectFilter ? { project_id: projectFilter } : undefined)
+  const { data: projects } = useProjects()
   const createSite = useCreateSite()
   const deleteSite = useDeleteSite()
   const [createOpen, setCreateOpen] = useState(false)
@@ -259,6 +271,14 @@ export default function SitesPage() {
           {v}
         </Button>
       ),
+    },
+    {
+      title: 'Projects',
+      key: 'projects',
+      render: (_: unknown, r: Site) =>
+        r.projects?.length
+          ? <Space size={4} wrap>{r.projects.map((p) => <Tag key={p.id} color="blue">{p.code}</Tag>)}</Space>
+          : <span style={{ color: '#bbb' }}>—</span>,
     },
     {
       title: 'Precision',
@@ -335,9 +355,19 @@ export default function SitesPage() {
           </Button>
         )}
       </div>
-      <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
-        Click a site name to view its location and associated tubes.
-      </Typography.Text>
+      <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 12 }}>
+        <Select
+          placeholder="Filter by project"
+          allowClear
+          style={{ width: 220 }}
+          value={projectFilter}
+          onChange={(v) => setProjectFilter(v)}
+          options={projects?.map((p) => ({ value: p.id, label: `${p.code} — ${p.name}` }))}
+        />
+        <Typography.Text type="secondary" style={{ fontSize: 13 }}>
+          Click a site name to view its location and tubes.
+        </Typography.Text>
+      </div>
       <Table dataSource={sites} columns={columns} rowKey="id" loading={isLoading} />
 
       <Modal title="Add Site" open={createOpen} onCancel={() => setCreateOpen(false)} footer={null} width={520} destroyOnClose>
@@ -356,7 +386,7 @@ export default function SitesPage() {
             key={editingSite.id}
             onFinish={handleEdit}
             loading={updateSite.isPending}
-            initialValues={editingSite}
+            initialValues={{ ...editingSite, project_ids: editingSite.projects?.map((p) => p.id) ?? [] }}
           />
         )}
       </Modal>

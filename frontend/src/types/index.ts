@@ -26,6 +26,12 @@ export interface Species {
   created_at: string
 }
 
+export interface SiteProject {
+  id: number
+  code: string
+  name: string
+}
+
 export interface Site {
   id: number
   name: string
@@ -36,6 +42,7 @@ export interface Site {
   precision?: string
   notes?: string
   created_at: string
+  projects?: SiteProject[]
 }
 
 export interface SpecimenSpecies {
@@ -217,6 +224,7 @@ export interface SiteCreate {
   lon?: number
   precision?: string
   notes?: string
+  project_ids?: number[]
 }
 
 export interface SiteUpdate {
@@ -227,6 +235,7 @@ export interface SiteUpdate {
   lon?: number
   precision?: string
   notes?: string
+  project_ids?: number[]
 }
 
 export interface SpecimenPhoto {

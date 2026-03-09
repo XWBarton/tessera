@@ -1,10 +1,8 @@
 import apiClient from './client'
 import type { Site, SiteCreate, SiteUpdate, Specimen } from '../types'
 
-export const getSites = async (q?: string): Promise<Site[]> => {
-  const { data } = await apiClient.get<Site[]>('/sites/', {
-    params: q !== undefined ? { q } : {},
-  })
+export const getSites = async (params?: { q?: string; project_id?: number }): Promise<Site[]> => {
+  const { data } = await apiClient.get<Site[]>('/sites/', { params: params || {} })
   return data
 }
 

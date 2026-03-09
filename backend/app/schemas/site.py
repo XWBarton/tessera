@@ -1,6 +1,15 @@
 from datetime import datetime
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
+
+
+class SiteProjectRef(BaseModel):
+    id: int
+    code: str
+    name: str
+
+    class Config:
+        from_attributes = True
 
 
 class SiteBase(BaseModel):
@@ -14,7 +23,7 @@ class SiteBase(BaseModel):
 
 
 class SiteCreate(SiteBase):
-    pass
+    project_ids: List[int] = []
 
 
 class SiteUpdate(BaseModel):
@@ -25,11 +34,13 @@ class SiteUpdate(BaseModel):
     lon: Optional[float] = None
     precision: Optional[str] = None
     notes: Optional[str] = None
+    project_ids: Optional[List[int]] = None
 
 
 class SiteRead(SiteBase):
     id: int
     created_at: datetime
+    projects: List[SiteProjectRef] = []
 
     class Config:
         from_attributes = True

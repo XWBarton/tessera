@@ -2,10 +2,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getSites, createSite, updateSite, deleteSite, getSiteSpecimens } from '../api/sites'
 import type { SiteCreate, SiteUpdate } from '../types'
 
-export const useSites = (q?: string) =>
+export const useSites = (params?: { q?: string; project_id?: number }) =>
   useQuery({
-    queryKey: ['sites', q],
-    queryFn: () => getSites(q),
+    queryKey: ['sites', params],
+    queryFn: () => getSites(params),
   })
 
 export const useCreateSite = () => {

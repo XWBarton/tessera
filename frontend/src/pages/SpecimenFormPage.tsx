@@ -55,6 +55,10 @@ export default function SpecimenFormPage() {
   const watchedAssociations: SpecimenSpeciesCreate[] = Form.useWatch('species_associations', form) || []
   const derivedTotal = watchedAssociations.reduce((sum, a) => sum + (a.specimen_count || 0), 0)
   const watchedSampleTypeId: number | undefined = Form.useWatch('sample_type_id', form)
+  const watchedProjectId: number | undefined = Form.useWatch('project_id', form)
+  const filteredSites = sites?.filter((s) =>
+    !s.projects?.length || s.projects.some((p) => p.id === watchedProjectId)
+  ) ?? []
   const selectedSampleType = sampleTypes?.find((st) => st.id === watchedSampleTypeId)
   const usesDerivedQuantity = selectedSampleType?.is_specimen === true
 
@@ -334,7 +338,13 @@ export default function SpecimenFormPage() {
             )}
           </Row>
 
-          <Form.Item name="site_ids" label="Collection Sites">
+          <Form.Item
+            name="site_ids"
+            label="Collection Sites"
+            extra={watchedProjectId && sites && filteredSites.length < sites.length
+              ? `Showing ${filteredSites.length} site${filteredSites.length !== 1 ? 's' : ''} for this project (untagged sites always shown)`
+              : undefined}
+          >
             <Select
               mode="multiple"
               placeholder="Select one or more sites (optional)"
@@ -346,7 +356,7 @@ export default function SpecimenFormPage() {
               onChange={(ids: number[]) => {
                 if (ids.length > 0) handleSiteChange(ids[0])
               }}
-              options={sites?.map((s) => ({
+              options={filteredSites.map((s) => ({
                 value: s.id,
                 label: s.habitat_type ? `${s.name} (${s.habitat_type})` : s.name,
               }))}
