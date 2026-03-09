@@ -40,6 +40,7 @@ def run_migrations():
             ("tube_usage_log", "destination_tube", "TEXT", None),
             ("sample_types", "is_specimen", "INTEGER DEFAULT 0",
              "UPDATE sample_types SET is_specimen = 1 WHERE name IN ('Voucher Specimens', 'Specimen')"),
+            ("projects", "is_protected", "INTEGER NOT NULL DEFAULT 0", None),
         ]
         for migration in add_column_migrations:
             table, column, col_def = migration[0], migration[1], migration[2]
@@ -94,6 +95,30 @@ def run_migrations():
             conn.commit()
             print("[tessera] Migration: created app_settings table")
             tables.add("app_settings")
+
+        if "site_projects" not in tables:
+            conn.execute(text("""
+                CREATE TABLE site_projects (
+                    site_id INTEGER NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+                    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                    PRIMARY KEY (site_id, project_id)
+                )
+            """))
+            conn.commit()
+            print("[tessera] Migration: created site_projects table")
+            tables.add("site_projects")
+
+        if "project_access" not in tables:
+            conn.execute(text("""
+                CREATE TABLE project_access (
+                    project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    PRIMARY KEY (project_id, user_id)
+                )
+            """))
+            conn.commit()
+            print("[tessera] Migration: created project_access table")
+            tables.add("project_access")
 
         # --- Create specimen_sites junction table and migrate existing site_id data ---
         if "specimen_sites" not in tables:
