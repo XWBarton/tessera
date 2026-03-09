@@ -23,7 +23,7 @@ import {
   AutoComplete,
   Switch,
 } from 'antd'
-import { EditOutlined, DeleteOutlined, DownloadOutlined, ExperimentOutlined, CameraOutlined, PlusOutlined } from '@ant-design/icons'
+import { EditOutlined, DeleteOutlined, DownloadOutlined, ExperimentOutlined, CameraOutlined, PlusOutlined, LockOutlined } from '@ant-design/icons'
 import type { MenuProps } from 'antd'
 import { Dropdown } from 'antd'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -263,6 +263,21 @@ export default function SpecimenDetailPage() {
 
   if (isLoading) return <Spin />
   if (!specimen) return <Typography.Text>Tube not found</Typography.Text>
+
+  if (specimen.restricted) {
+    return (
+      <div style={{ maxWidth: 480, margin: '80px auto', textAlign: 'center' }}>
+        <LockOutlined style={{ fontSize: 48, color: '#faad14', marginBottom: 16 }} />
+        <Typography.Title level={4}>Access Restricted</Typography.Title>
+        <Typography.Text type="secondary">
+          This tube belongs to a Secure Project. Contact your administrator to request access.
+        </Typography.Text>
+        <div style={{ marginTop: 24 }}>
+          <Button onClick={() => navigate(-1)}>Go Back</Button>
+        </div>
+      </div>
+    )
+  }
 
   const countedAssociations = specimen.species_associations.filter(
     (a) => (a.specimen_count ?? 0) > 0,
@@ -652,6 +667,7 @@ export default function SpecimenDetailPage() {
             <strong>{specimen.specimen_code}</strong>
           </Descriptions.Item>
           <Descriptions.Item label="Project">
+            {specimen.project?.is_protected && <LockOutlined style={{ color: '#faad14', marginRight: 4 }} />}
             {specimen.project?.name}{' '}
             <Tag color="green">{specimen.project?.code}</Tag>
           </Descriptions.Item>

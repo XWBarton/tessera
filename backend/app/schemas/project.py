@@ -24,12 +24,23 @@ class ProjectCreate(ProjectBase):
 class ProjectUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
+    is_protected: Optional[bool] = None
 
 
 class ProjectRead(ProjectBase):
     id: int
     created_by: int
     created_at: datetime
+    is_protected: bool = False
+
+    class Config:
+        from_attributes = True
+
+
+class ProjectAccessUserRead(BaseModel):
+    id: int
+    username: str
+    full_name: str
 
     class Config:
         from_attributes = True

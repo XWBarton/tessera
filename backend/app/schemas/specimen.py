@@ -129,6 +129,7 @@ class SpecimenDetail(SpecimenRead):
     sites: List[SiteRead] = []
     sample_type: Optional[SampleTypeRead] = None
     species_associations: List[SpecimenSpeciesRead] = []
+    restricted: bool = False
 
     class Config:
         from_attributes = True

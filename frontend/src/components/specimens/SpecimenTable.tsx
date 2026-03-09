@@ -1,5 +1,5 @@
-import { Table, Tag, Button, Space } from 'antd'
-import { EyeOutlined, EditOutlined } from '@ant-design/icons'
+import { Table, Tag, Button, Space, Tooltip } from 'antd'
+import { EyeOutlined, EditOutlined, LockOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import type { Specimen, SpecimenList } from '../../types'
 
@@ -34,20 +34,32 @@ export default function SpecimenTable({
       title: 'Code',
       dataIndex: 'specimen_code',
       key: 'specimen_code',
-      render: (c: string, r: Specimen) => (
-        <a onClick={() => navigate(`/specimens/${r.id}`)}>{c}</a>
-      ),
+      render: (c: string, r: Specimen) =>
+        r.restricted ? (
+          <Space size={4}>
+            <LockOutlined style={{ color: '#faad14' }} />
+            <a onClick={() => navigate(`/specimens/${r.id}`)}>{c}</a>
+          </Space>
+        ) : (
+          <a onClick={() => navigate(`/specimens/${r.id}`)}>{c}</a>
+        ),
     },
     {
       title: 'Project',
       key: 'project',
       render: (_: unknown, r: Specimen) =>
-        r.project ? <Tag color="green">{r.project.code}</Tag> : '—',
+        r.project ? (
+          <Space size={4}>
+            {r.project.is_protected && <LockOutlined style={{ color: '#faad14' }} />}
+            <Tag color="green">{r.project.code}</Tag>
+          </Space>
+        ) : '—',
     },
     {
       title: 'Date',
       key: 'collection_date',
       render: (_: unknown, r: Specimen) => {
+        if (r.restricted) return <Tooltip title="Access restricted"><span style={{ color: '#bbb' }}>—</span></Tooltip>
         if (!r.collection_date) return '—'
         if (r.collection_date_end && r.collection_date_end !== r.collection_date)
           return `${r.collection_date} – ${r.collection_date_end}`
@@ -57,13 +69,16 @@ export default function SpecimenTable({
     {
       title: 'Collector',
       key: 'collector',
-      render: (_: unknown, r: Specimen) =>
-        r.collector?.full_name || r.collector_name || <em style={{ color: '#bbb' }}>Unknown</em>,
+      render: (_: unknown, r: Specimen) => {
+        if (r.restricted) return <Tooltip title="Access restricted"><span style={{ color: '#bbb' }}>—</span></Tooltip>
+        return r.collector?.full_name || r.collector_name || <em style={{ color: '#bbb' }}>Unknown</em>
+      },
     },
     {
       title: 'Species',
       key: 'species',
       render: (_: unknown, r: Specimen) => {
+        if (r.restricted) return <Tooltip title="Access restricted"><span style={{ color: '#bbb' }}>—</span></Tooltip>
         if (r.species_associations.length === 0) return '—'
         const seen = new Set<string>()
         const unique = r.species_associations.filter((a) => {
@@ -87,8 +102,11 @@ export default function SpecimenTable({
     },
     {
       title: 'Storage',
-      dataIndex: 'storage_location',
       key: 'storage_location',
+      render: (_: unknown, r: Specimen) => {
+        if (r.restricted) return <Tooltip title="Access restricted"><span style={{ color: '#bbb' }}>—</span></Tooltip>
+        return r.storage_location || '—'
+      },
     },
     {
       title: 'Actions',
@@ -102,13 +120,15 @@ export default function SpecimenTable({
           >
             View
           </Button>
-          <Button
-            size="small"
-            icon={<EditOutlined />}
-            onClick={() => navigate(`/specimens/${r.id}/edit`)}
-          >
-            Edit
-          </Button>
+          {!r.restricted && (
+            <Button
+              size="small"
+              icon={<EditOutlined />}
+              onClick={() => navigate(`/specimens/${r.id}/edit`)}
+            >
+              Edit
+            </Button>
+          )}
         </Space>
       ),
     },
@@ -123,6 +143,7 @@ export default function SpecimenTable({
       rowSelection={{
         type: 'checkbox',
         onChange: (_, rows) => onSelectionChange(rows.map((r) => r.id)),
+        getCheckboxProps: (r) => ({ disabled: !!r.restricted }),
       }}
       pagination={{
         current: currentPage,

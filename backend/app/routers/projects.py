@@ -10,7 +10,7 @@ from ..crud.project import (
     get_project_by_code,
 )
 from ..crud.specimen import get_specimens
-from ..schemas.project import ProjectRead, ProjectCreate, ProjectUpdate
+from ..schemas.project import ProjectRead, ProjectCreate, ProjectUpdate, ProjectAccessUserRead
 from ..schemas.specimen import SpecimenList
 from ..models.user import User
 from typing import List
@@ -90,3 +90,66 @@ def list_project_specimens(
         raise HTTPException(status_code=404, detail="Project not found")
     items, total = get_specimens(db, project_id=project_id, skip=skip, limit=limit)
     return {"items": items, "total": total, "skip": skip, "limit": limit}
+
+
+def _get_project_or_404(db, project_id):
+    p = get_project(db, project_id)
+    if not p:
+        raise HTTPException(status_code=404, detail="Project not found")
+    return p
+
+
+@router.patch("/{project_id}/protection", response_model=ProjectRead)
+def set_project_protection(
+    project_id: int,
+    body: dict,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    project = _get_project_or_404(db, project_id)
+    project.is_protected = body.get("is_protected", project.is_protected)
+    db.commit()
+    db.refresh(project)
+    return project
+
+
+@router.get("/{project_id}/access", response_model=List[ProjectAccessUserRead])
+def get_project_access(
+    project_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    project = _get_project_or_404(db, project_id)
+    return project.allowed_users
+
+
+@router.post("/{project_id}/access/{user_id}", response_model=List[ProjectAccessUserRead])
+def grant_project_access(
+    project_id: int,
+    user_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    project = _get_project_or_404(db, project_id)
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if user not in project.allowed_users:
+        project.allowed_users.append(user)
+        db.commit()
+        db.refresh(project)
+    return project.allowed_users
+
+
+@router.delete("/{project_id}/access/{user_id}", response_model=List[ProjectAccessUserRead])
+def revoke_project_access(
+    project_id: int,
+    user_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    project = _get_project_or_404(db, project_id)
+    project.allowed_users = [u for u in project.allowed_users if u.id != user_id]
+    db.commit()
+    db.refresh(project)
+    return project.allowed_users

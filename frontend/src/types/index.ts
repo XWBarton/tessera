@@ -16,6 +16,7 @@ export interface Project {
   description?: string
   created_by: number
   created_at: string
+  is_protected?: boolean
 }
 
 export interface Species {
@@ -86,6 +87,7 @@ export interface Specimen {
   sites: Site[]
   sample_type?: SampleType
   species_associations: SpecimenSpecies[]
+  restricted?: boolean
 }
 
 export interface SpecimenList {

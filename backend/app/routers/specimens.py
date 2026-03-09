@@ -57,6 +57,14 @@ ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".heic", ".heif"
 router = APIRouter(prefix="/specimens", tags=["specimens"])
 
 
+def _has_access(project, user) -> bool:
+    if not project or not project.is_protected:
+        return True
+    if user.is_admin:
+        return True
+    return any(u.id == user.id for u in project.allowed_users)
+
+
 def _label_fields(specimen):
     """Extract common label fields from a specimen."""
     first = specimen.species_associations[0] if specimen.species_associations else None
@@ -193,7 +201,7 @@ def list_specimens(
     skip: int = 0,
     limit: int = 50,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     items, total = get_specimens(
         db,
@@ -211,7 +219,34 @@ def list_specimens(
         skip=skip,
         limit=limit,
     )
-    return {"items": items, "total": total, "skip": skip, "limit": limit}
+    serialized = []
+    for item in items:
+        d = SpecimenDetail.model_validate(item).model_dump()
+        if not _has_access(item.project, current_user):
+            d.update({
+                "collection_date": None,
+                "collection_date_end": None,
+                "collector_id": None,
+                "collector_name": None,
+                "collector": None,
+                "entered_by": None,
+                "site_ids": [],
+                "sites": [],
+                "sample_type_id": None,
+                "sample_type": None,
+                "quantity_value": None,
+                "quantity_unit": None,
+                "quantity_remaining": None,
+                "collection_lat": None,
+                "collection_lon": None,
+                "collection_location_text": None,
+                "storage_location": None,
+                "notes": None,
+                "species_associations": [],
+                "restricted": True,
+            })
+        serialized.append(d)
+    return {"items": serialized, "total": total, "skip": skip, "limit": limit}
 
 
 @router.post("/", response_model=SpecimenDetail)
@@ -244,11 +279,36 @@ def find_by_code(code: str, db: Session = Depends(get_db), _: User = Depends(get
 def read_specimen(
     specimen_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     specimen = get_specimen(db, specimen_id)
     if not specimen:
         raise HTTPException(status_code=404, detail="Specimen not found")
+    if not _has_access(specimen.project, current_user):
+        d = SpecimenDetail.model_validate(specimen).model_dump()
+        d.update({
+            "collection_date": None,
+            "collection_date_end": None,
+            "collector_id": None,
+            "collector_name": None,
+            "collector": None,
+            "entered_by": None,
+            "site_ids": [],
+            "sites": [],
+            "sample_type_id": None,
+            "sample_type": None,
+            "quantity_value": None,
+            "quantity_unit": None,
+            "quantity_remaining": None,
+            "collection_lat": None,
+            "collection_lon": None,
+            "collection_location_text": None,
+            "storage_location": None,
+            "notes": None,
+            "species_associations": [],
+            "restricted": True,
+        })
+        return d
     return specimen
 
 

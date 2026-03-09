@@ -15,11 +15,14 @@ import {
   Tag,
   Popconfirm,
   Alert,
+  Drawer,
+  Select,
 } from 'antd'
-import { PlusOutlined, DeleteOutlined, CheckCircleOutlined, CloseCircleOutlined, LinkOutlined } from '@ant-design/icons'
+import { PlusOutlined, DeleteOutlined, CheckCircleOutlined, CloseCircleOutlined, LinkOutlined, LockOutlined } from '@ant-design/icons'
 import { useUsers, useCreateUser, useUpdateUser } from '../hooks/useUsers'
 import { useSampleTypes, useCreateSampleType, useUpdateSampleType, useDeleteSampleType } from '../hooks/useSampleTypes'
-import type { User, SampleType } from '../types'
+import { useProjects } from '../hooks/useProjects'
+import type { User, SampleType, Project } from '../types'
 import { useAuth } from '../context/AuthContext'
 import { useLookupOptions, useAddLookupOption, useDeleteLookupOption } from '../hooks/useLookups'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -521,6 +524,188 @@ function IntegrationsTab() {
   )
 }
 
+function ProjectAccessDrawer({ project, onClose }: { project: Project; onClose: () => void }) {
+  const qc = useQueryClient()
+  const { data: allUsers = [] } = useUsers()
+  const [selectedUserId, setSelectedUserId] = useState<number | null>(null)
+
+  const { data: accessList = [], isLoading: accessLoading } = useQuery({
+    queryKey: ['project-access', project.id],
+    queryFn: async () => {
+      const { data } = await apiClient.get<{ id: number; username: string; full_name: string }[]>(
+        `/projects/${project.id}/access`
+      )
+      return data
+    },
+  })
+
+  const grantAccess = useMutation({
+    mutationFn: async (userId: number) => {
+      await apiClient.post(`/projects/${project.id}/access/${userId}`)
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['project-access', project.id] })
+      setSelectedUserId(null)
+      message.success('Access granted')
+    },
+    onError: () => message.error('Failed to grant access'),
+  })
+
+  const revokeAccess = useMutation({
+    mutationFn: async (userId: number) => {
+      await apiClient.delete(`/projects/${project.id}/access/${userId}`)
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['project-access', project.id] })
+      message.success('Access revoked')
+    },
+    onError: () => message.error('Failed to revoke access'),
+  })
+
+  const accessUserIds = new Set(accessList.map((u) => u.id))
+  const availableUsers = allUsers.filter((u) => !accessUserIds.has(u.id))
+
+  return (
+    <Drawer
+      title={
+        <Space>
+          <LockOutlined style={{ color: '#faad14' }} />
+          Manage Access — {project.name} ({project.code})
+        </Space>
+      }
+      open
+      onClose={onClose}
+      width={420}
+    >
+      <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 16 }}>
+        Admins always have access regardless of this list.
+      </Typography.Text>
+
+      <Typography.Title level={5} style={{ marginBottom: 8 }}>Add User</Typography.Title>
+      <Space.Compact style={{ width: '100%', marginBottom: 24 }}>
+        <Select
+          style={{ flex: 1 }}
+          placeholder="Select a user"
+          value={selectedUserId}
+          onChange={(v) => setSelectedUserId(v)}
+          options={availableUsers.map((u) => ({
+            value: u.id,
+            label: `${u.full_name} (${u.username})`,
+          }))}
+          showSearch
+          filterOption={(input, option) =>
+            String(option?.label ?? '').toLowerCase().includes(input.toLowerCase())
+          }
+        />
+        <Button
+          type="primary"
+          disabled={selectedUserId == null}
+          loading={grantAccess.isPending}
+          onClick={() => { if (selectedUserId != null) grantAccess.mutate(selectedUserId) }}
+        >
+          Grant
+        </Button>
+      </Space.Compact>
+
+      <Typography.Title level={5} style={{ marginBottom: 8 }}>Users with Access</Typography.Title>
+      <Table
+        dataSource={accessList}
+        rowKey="id"
+        loading={accessLoading}
+        pagination={false}
+        size="small"
+        columns={[
+          { title: 'Name', dataIndex: 'full_name', key: 'full_name' },
+          { title: 'Username', dataIndex: 'username', key: 'username' },
+          {
+            title: '',
+            key: 'actions',
+            width: 80,
+            render: (_: unknown, record: { id: number; username: string; full_name: string }) => (
+              <Popconfirm
+                title={`Remove access for ${record.full_name}?`}
+                okText="Remove"
+                okButtonProps={{ danger: true }}
+                onConfirm={() => revokeAccess.mutate(record.id)}
+              >
+                <Button icon={<DeleteOutlined />} size="small" danger />
+              </Popconfirm>
+            ),
+          },
+        ]}
+      />
+    </Drawer>
+  )
+}
+
+function ProjectsTab() {
+  const qc = useQueryClient()
+  const { data: projects, isLoading } = useProjects()
+  const [accessProject, setAccessProject] = useState<Project | null>(null)
+
+  const toggleProtection = useMutation({
+    mutationFn: async ({ id, is_protected }: { id: number; is_protected: boolean }) => {
+      await apiClient.patch(`/projects/${id}/protection`, { is_protected })
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['projects'] }),
+    onError: () => message.error('Failed to update project protection'),
+  })
+
+  const columns = [
+    { title: 'Code', dataIndex: 'code', key: 'code', render: (v: string) => <Tag>{v}</Tag> },
+    {
+      title: 'Name',
+      key: 'name',
+      render: (_: unknown, r: Project) => (
+        <Space size={4}>
+          {r.is_protected && <LockOutlined style={{ color: '#faad14' }} />}
+          {r.name}
+        </Space>
+      ),
+    },
+    {
+      title: 'Secure',
+      key: 'is_protected',
+      render: (_: unknown, r: Project) => (
+        <Switch
+          checked={!!r.is_protected}
+          onChange={(checked) => toggleProtection.mutate({ id: r.id, is_protected: checked })}
+        />
+      ),
+    },
+    {
+      title: 'Actions',
+      key: 'actions',
+      render: (_: unknown, r: Project) => (
+        <Button
+          size="small"
+          icon={<LockOutlined />}
+          onClick={() => setAccessProject(r)}
+        >
+          Manage Access
+        </Button>
+      ),
+    },
+  ]
+
+  return (
+    <div>
+      <Table
+        dataSource={projects}
+        columns={columns}
+        rowKey="id"
+        loading={isLoading}
+      />
+      {accessProject && (
+        <ProjectAccessDrawer
+          project={accessProject}
+          onClose={() => setAccessProject(null)}
+        />
+      )}
+    </div>
+  )
+}
+
 function AboutTab() {
   return (
     <div style={{ maxWidth: 540, paddingTop: 8 }}>
@@ -552,6 +737,7 @@ export default function AdminPage() {
           { key: 'sample-types', label: 'Sample Types', children: <SampleTypesTab /> },
           { key: 'options', label: 'Dropdown Options', children: <OptionsTab /> },
           { key: 'integrations', label: 'Integrations', children: <IntegrationsTab /> },
+          { key: 'projects', label: 'Projects', children: <ProjectsTab /> },
           { key: 'about', label: 'About', children: <AboutTab /> },
         ]}
       />
