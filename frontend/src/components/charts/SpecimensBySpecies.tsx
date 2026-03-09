@@ -22,7 +22,7 @@ export default function SpecimensBySpecies({ specimens }: Props) {
   const counts: Record<string, number> = {}
   specimens.forEach((s) => {
     if (s.species_associations.length === 0) {
-      counts['Unknown'] = (counts['Unknown'] || 0) + 1
+      counts['No species'] = (counts['No species'] || 0) + 1
     } else {
       s.species_associations.forEach((a) => {
         const key = a.species?.scientific_name || a.free_text_species || 'Unknown'
