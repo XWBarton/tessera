@@ -2,7 +2,10 @@ from sqlalchemy.orm import Session
 from ..models.site import Site
 from ..models.project import Project
 from ..schemas.site import SiteCreate, SiteUpdate
-from typing import Optional, List
+from typing import Optional, List, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from ..models.user import User
 
 
 def _set_projects(db: Session, site: Site, project_ids: List[int]):
@@ -12,21 +15,40 @@ def _set_projects(db: Session, site: Site, project_ids: List[int]):
         site.projects = []
 
 
-def get_all_sites(db: Session, skip: int = 0, limit: int = 200, project_id: Optional[int] = None) -> List[Site]:
+def _site_visible(site: Site, user: "User") -> bool:
+    """Return False if every associated project is protected and the user has no access to any."""
+    if user.is_admin:
+        return True
+    if not site.projects:
+        return True  # untagged site — visible to everyone
+    accessible = [
+        p for p in site.projects
+        if not p.is_protected or any(u.id == user.id for u in p.allowed_users)
+    ]
+    return len(accessible) > 0
+
+
+def get_all_sites(db: Session, skip: int = 0, limit: int = 200, project_id: Optional[int] = None, user: Optional["User"] = None) -> List[Site]:
     q = db.query(Site)
     if project_id is not None:
         q = q.filter(Site.projects.any(id=project_id))
-    return q.order_by(Site.name).offset(skip).limit(limit).all()
+    sites = q.order_by(Site.name).offset(skip).limit(limit).all()
+    if user is not None:
+        sites = [s for s in sites if _site_visible(s, user)]
+    return sites
 
 
-def search_sites(db: Session, q: str, skip: int = 0, limit: int = 50, project_id: Optional[int] = None) -> List[Site]:
+def search_sites(db: Session, q: str, skip: int = 0, limit: int = 50, project_id: Optional[int] = None, user: Optional["User"] = None) -> List[Site]:
     query = (
         db.query(Site)
         .filter(Site.name.ilike(f"%{q}%") | Site.description.ilike(f"%{q}%"))
     )
     if project_id is not None:
         query = query.filter(Site.projects.any(id=project_id))
-    return query.order_by(Site.name).offset(skip).limit(limit).all()
+    sites = query.order_by(Site.name).offset(skip).limit(limit).all()
+    if user is not None:
+        sites = [s for s in sites if _site_visible(s, user)]
+    return sites
 
 
 def get_site(db: Session, site_id: int) -> Optional[Site]:

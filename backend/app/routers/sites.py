@@ -40,11 +40,11 @@ def list_sites(
     limit: int = 200,
     project_id: Optional[int] = None,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     if q is not None:
-        return search_sites(db, q, skip, limit, project_id)
-    return get_all_sites(db, skip, limit, project_id)
+        return search_sites(db, q, skip, limit, project_id, user=current_user)
+    return get_all_sites(db, skip, limit, project_id, user=current_user)
 
 
 @router.post("/bulk-import", response_model=SiteBulkImportResult)
