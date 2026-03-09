@@ -6,43 +6,80 @@
 
 > *A small quadrilateral tablet of wood, bone, ivory, or the like, used for various purposes, as a token, tally, ticket, label, etc.* — Oxford English Dictionary
 
-Tessera is a laboratory specimen tracking system for managing biological collections. It tracks tubes and specimens from field collection through storage, with support for species associations, collection sites, quantity management, and label printing.
-
-> **Work in Progress** — Tessera has not yet been formally deployed or validated in a laboratory environment. Use at your own risk. Always back up your data regularly using the Export page before updates or changes.
+Tessera is a laboratory specimen tracking system for managing biological collections. It tracks tubes and specimens from field collection through storage and downstream molecular work.
 
 ---
 
 ## Features
 
-- **Specimen tracking** — Auto-generated tube codes (`PROJ-001`, `PROJ-002`...), custom codes, collection metadata, storage locations
-- **Species associations** — Link specimens to a curated species list or free-text entries, with count, life stage, sex, and confidence level per association
-- **Collection sites** — GPS coordinates, habitat type, and precision level (GPS / Suburb / City / Region / State) with map visualisation
-- **Quantity management** — Track sample volume/count and record withdrawals with a usage log
-- **Label printing** — ZPL (Zebra thermal printers) and CSV (Dymo/Brady) formats, 6 templates (eppendorf cap/side/combo, falcon, bottle, standard)
-- **Interactive map** — Specimens plotted by confidence (colour) and precision (circle radius, scaled in metres)
-- **Bulk import** — CSV import with pipe-delimited species format
-- **Data export** — Wide-format CSV (by project, collector, or species), full database backup/restore
-- **Specimen photos** — Upload and manage photos per specimen
-- **First-run setup wizard** — Creates a real admin account on first startup and removes the default credentials
+### Specimens & Tubes
+- Auto-generated tube codes per project (`AMPH2024-001`, `AMPH2024-002`...) or custom admin-set codes
+- Full collection metadata — date range, collector, storage location, notes
+- Multiple species associations per tube, each with count, life stage, sex, and confidence level (`Confirmed`, `Probable`, `Possible`, `Unknown`)
+- Sample quantity tracking with a full withdrawal/usage log per tube
+- Non-destructive transfers — copy metadata and species to a destination tube automatically
+- Tube photos — upload and manage multiple photos per specimen
+- Link tubes to downstream Elementa LIMS runs (extraction, PCR, Sanger, library prep, NGS)
+
+### Collection Sites
+- Sites with GPS coordinates, habitat type, description, and location precision level (GPS / Suburb / City / Region / State)
+- Sites tagged to one or more projects (many-to-many)
+- Map view per site showing a precision-scaled circle or GPS point (Street and Satellite basemaps)
+- Site drawer shows all tubes collected there
+- Site filter on tube creation — shows only sites associated with the selected project
+
+### Projects
+- Project codes used as tube code prefixes
+- **Secure Projects** — admins can mark a project protected and manage a per-user access allowlist
+  - Unauthorised users see only tube codes; all other fields are redacted server-side
+  - Sites tagged exclusively to protected projects are hidden entirely from unauthorised users
+
+### Dashboard
+- Configurable widgets — choose which to show and drag to reorder
+- Available widgets: Total Tubes, Total Species, Total Sites, Total Projects, Specimens by Species (pie), Sample Type Split (pie), Storage Usage (bar), Collection Activity (line), Collector Leaderboard, Recent Additions, Low Quantity Alerts
+
+### Map (Explore)
+- All georeferenced specimens plotted on an interactive map
+- Marker colour by identification confidence; circle radius scaled to location precision
+
+### Label Printing
+- ZPL output for Zebra thermal printers — 6 templates: Standard, Eppendorf Cap, Eppendorf Side, Eppendorf Combo, Falcon, Bottle
+- CSV output for Dymo / Brady label software
+- Per-specimen or bulk label download
+
+### Import & Export
+- Bulk CSV import for specimens (admin only) with pipe-delimited species format
+- Data export as wide-format CSV filtered by project, collector, or species
+- Full database backup and restore (SQLite `.db` file) via the Export page
+
+### Administration
+- User management — create, deactivate, hard-delete users
+- Species list management — curated lookup table with free-text fallback
+- Sample type management
+- Per-user project access control for protected projects
+- App settings — configure Elementa LIMS URL
 
 ---
 
-## Tech Stack
+## Permissions
 
-| Layer | Technology |
-|---|---|
-| Backend | Python 3.12 + FastAPI + SQLAlchemy 2 |
-| Database | SQLite (WAL mode) |
-| Auth | JWT (HS256) + bcrypt |
-| Frontend | React 18 + TypeScript + Vite |
-| UI | Ant Design 5 |
-| Charts | Recharts |
-| Map | react-leaflet + OpenStreetMap |
-| Deployment | Docker Compose |
+| Action | User | Admin |
+|---|---|---|
+| View & search tubes | ✓ | ✓ |
+| Create & edit tubes | ✓ | ✓ |
+| Add & edit sites | ✓ | ✓ |
+| Set custom tube codes | | ✓ |
+| Move tubes between projects | | ✓ |
+| Delete tubes / sites / projects | | ✓ |
+| Create & edit projects | | ✓ |
+| Manage users & species | | ✓ |
+| Bulk import | | ✓ |
+| Backup / restore database | | ✓ |
+| Manage protected project access | | ✓ |
 
 ---
 
-## Getting Started
+## Deployment
 
 ### Requirements
 
@@ -56,126 +93,71 @@ cd tessera
 docker compose up --build
 ```
 
-Open [http://localhost:8520](http://localhost:8520) in your browser.
-
-On first launch the setup wizard will prompt you to create an administrator account. The default `admin/changeme123` account is removed once setup is complete.
+Open [http://localhost:8520](http://localhost:8520). On first launch the setup wizard creates an administrator account.
 
 ### Environment Variables
 
-Create a `.env` file in the project root to override defaults:
+Create a `.env` file in the project root:
 
 ```env
-SECRET_KEY=change-this-to-a-long-random-string
-ACCESS_TOKEN_EXPIRE_MINUTES=480
+SECRET_KEY=your-long-random-secret            # generate with: openssl rand -hex 32
+CORS_ORIGINS=https://tessera.example.com      # comma-separated allowed origins
 FIRST_ADMIN_USERNAME=admin
 FIRST_ADMIN_PASSWORD=changeme123
 FIRST_ADMIN_EMAIL=admin@example.com
 FIRST_ADMIN_FULL_NAME=Administrator
 
-# Optional: URL of a companion Elementa LIMS instance.
-# When set, Mol. Ref values in usage logs become clickable links into Elementa.
-ELEMENTA_URL=http://your-server:8001
-```
-
-`SECRET_KEY` should be a long random string in production. Generate one with:
-
-```bash
-openssl rand -hex 32
+# Optional: companion Elementa LIMS instance.
+# Mol. Ref values in usage logs become clickable links into Elementa.
+ELEMENTA_URL=https://elementa.example.com
 ```
 
 ### Data Persistence
 
-Specimen data, photos, and avatars are stored in a named Docker volume (`tessera_data`). The database will survive container restarts and rebuilds. To wipe all data:
+All data, photos, and avatars are stored in the `tessera_data` Docker volume and survive container restarts and rebuilds.
 
 ```bash
+# Wipe all data (irreversible)
 docker compose down -v
+```
+
+### Server Updates
+
+```bash
+git pull
+docker compose up --build -d
 ```
 
 ---
 
-## Usage
+## Bulk Import
 
-### Specimen Codes
+Download the CSV template from the Import page. Species column format:
 
-Codes are auto-generated per project as `{PROJECT_CODE}-{NNN}` (e.g. `AMPH2024-001`). Administrators can also set a custom code at creation time.
+```
+Name|count|life_stage|sex|confidence
+```
 
-### Species Associations
-
-Each specimen can have multiple species associations. Each association records:
-
-- Species (lookup table or free text)
-- Count, life stage, sex
-- Confidence: `Confirmed`, `Probable`, `Possible`, `Unknown`
-
-### Bulk Import
-
-Admins can import specimens via CSV at `/import`. Download the template from that page for the correct column format.
-
-Species column format: `Name|count|life_stage|sex|confidence` — multiple species separated by `;`
+Multiple species separated by `;`:
 
 ```
 Python regius|2|Adult|M|Confirmed;Python regius|1|Adult|F|Confirmed
 ```
 
-> Do not open or edit the CSV in Excel — use LibreOffice Calc, R, or a plain text editor to avoid date and encoding corruption.
-
-### Label Printing
-
-Labels can be downloaded per specimen or in bulk. Supported formats:
-
-- **ZPL** — for Zebra thermal label printers (6 templates for different tube types)
-- **CSV** — for Dymo or Brady label software
-
-### Map
-
-The map page shows all georeferenced specimens. Marker colour indicates identification confidence; circle size indicates location precision:
-
-| Precision | Radius |
-|---|---|
-| GPS | Fixed 8 px dot |
-| Suburb | 1,500 m |
-| City | 8,000 m |
-| Region | 50,000 m |
-| State | 150,000 m |
-
-### Backup & Restore
-
-Admins can download a full database backup (`.db` file) and restore from a previous backup via the Export page. Backups are timestamped SQLite files.
+> Do not open or edit the CSV in Excel — use LibreOffice Calc or a plain text editor to avoid date and encoding corruption.
 
 ---
 
-## Permissions
+## Elementa Integration
 
-| Action | User | Admin |
-|---|---|---|
-| View & search specimens | ✓ | ✓ |
-| Create specimens | ✓ | ✓ |
-| Edit own specimens | ✓ | ✓ |
-| Set custom tube codes | | ✓ |
-| Move specimens between projects | | ✓ |
-| Delete specimens | | ✓ |
-| Manage projects / sites / species | | ✓ |
-| Manage users | | ✓ |
-| Bulk import | | ✓ |
-| Backup / restore database | | ✓ |
+Tessera integrates with [Elementa](https://github.com/XWBarton/elementa), a companion LIMS for molecular workflows. When linked:
+
+- Usage log entries in Tessera are created automatically when a tube is added to an Elementa run
+- Removing a sample from an Elementa run clears the link in Tessera
+- Set `ELEMENTA_URL` in `.env` to make Mol. Ref values in usage logs clickable
 
 ---
 
-## Development
+## Security
 
-The backend API runs on port `8000` inside Docker and is proxied through nginx on port `80`. To develop locally without Docker:
-
-```bash
-# Backend
-cd backend
-pip install -r requirements.txt
-uvicorn app.main:app --reload
-
-# Frontend
-cd frontend
-npm install
-npm run dev
-```
-
-API docs are available at [http://localhost:8000/docs](http://localhost:8000/docs) when running the backend directly.
-
+See [SECURITY.md](SECURITY.md) for a full security overview including authentication controls, protected project data handling, transport security, and the production deployment checklist.
