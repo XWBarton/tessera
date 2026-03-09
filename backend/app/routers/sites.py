@@ -83,7 +83,7 @@ def bulk_import_sites(
 def create_new_site(
     site: SiteCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_admin),
+    _: User = Depends(get_current_user),
 ):
     if get_site_by_name(db, site.name):
         raise HTTPException(status_code=400, detail="A site with this name already exists")

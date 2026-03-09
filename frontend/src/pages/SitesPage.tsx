@@ -349,11 +349,9 @@ export default function SitesPage() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <Typography.Title level={3} style={{ margin: 0 }}>Sites</Typography.Title>
-        {user?.is_admin && (
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
-            Add Site
-          </Button>
-        )}
+        <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
+          Add Site
+        </Button>
       </div>
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 12 }}>
         <Select
