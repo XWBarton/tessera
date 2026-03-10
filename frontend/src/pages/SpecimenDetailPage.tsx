@@ -370,6 +370,7 @@ export default function SpecimenDetailPage() {
       unit: entry.unit,
       quantity_taken: entry.quantity_taken,
       purpose: entry.purpose,
+      molecular_ref: entry.molecular_ref,
       destination_tube: entry.destination_tube,
       notes: entry.notes,
     })
@@ -397,6 +398,7 @@ export default function SpecimenDetailPage() {
           quantity_taken,
           unit: values.unit as string || 'specimens',
           purpose: values.purpose as string | undefined,
+          molecular_ref: (values.molecular_ref as string | undefined) || undefined,
           non_destructive: nonDestructiveEdit,
           destination_tube: (values.destination_tube as string | undefined) || undefined,
           breakdown,
@@ -916,6 +918,9 @@ export default function SpecimenDetailPage() {
 
           <Form.Item name="purpose" label="Purpose">
             <Input placeholder="e.g. DNA extraction, morphology voucher" />
+          </Form.Item>
+          <Form.Item name="molecular_ref" label="Elementa Ref">
+            <Input placeholder="e.g. 42" />
           </Form.Item>
           <Form.Item name="notes" label="Notes">
             <Input.TextArea rows={2} />
