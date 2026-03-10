@@ -34,7 +34,9 @@ function UsersTab() {
   const createUser = useCreateUser()
   const updateUser = useUpdateUser()
   const [modalOpen, setModalOpen] = useState(false)
+  const [resetUser, setResetUser] = useState<User | null>(null)
   const [form] = Form.useForm()
+  const [resetForm] = Form.useForm()
 
   const handleCreate = async (values: {
     username: string
@@ -51,6 +53,18 @@ function UsersTab() {
     } catch (e: unknown) {
       const err = e as { response?: { data?: { detail?: string } } }
       message.error(err.response?.data?.detail || 'Failed to create user')
+    }
+  }
+
+  const handleResetPassword = async ({ password }: { password: string }) => {
+    if (!resetUser) return
+    try {
+      await updateUser.mutateAsync({ id: resetUser.id, updates: { password } })
+      message.success(`Password reset for ${resetUser.username}`)
+      setResetUser(null)
+      resetForm.resetFields()
+    } catch {
+      message.error('Failed to reset password')
     }
   }
 
@@ -87,6 +101,18 @@ function UsersTab() {
               .catch(() => message.error('Failed to update user'))
           }
         />
+      ),
+    },
+    {
+      title: '',
+      key: 'actions',
+      width: 120,
+      render: (_: unknown, record: User) => (
+        record.id !== currentUser?.id ? (
+          <Button size="small" icon={<LockOutlined />} onClick={() => { setResetUser(record); resetForm.resetFields() }}>
+            Reset Password
+          </Button>
+        ) : null
       ),
     },
   ]
@@ -163,6 +189,24 @@ function UsersTab() {
               </Button>
               <Button onClick={() => setModalOpen(false)}>Cancel</Button>
             </Space>
+          </Form.Item>
+        </Form>
+      </Modal>
+      <Modal
+        title={`Reset Password — ${resetUser?.username}`}
+        open={!!resetUser}
+        onCancel={() => { setResetUser(null); resetForm.resetFields() }}
+        footer={null}
+        destroyOnClose
+      >
+        <Form form={resetForm} layout="vertical" onFinish={handleResetPassword}>
+          <Form.Item name="password" label="New Password" rules={[{ required: true, min: 8 }]}>
+            <Input.Password />
+          </Form.Item>
+          <Form.Item>
+            <Button type="primary" htmlType="submit" loading={updateUser.isPending}>
+              Reset Password
+            </Button>
           </Form.Item>
         </Form>
       </Modal>
