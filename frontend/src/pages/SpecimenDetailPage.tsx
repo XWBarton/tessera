@@ -524,7 +524,19 @@ export default function SpecimenDetailPage() {
       key: 'purpose',
       width: 160,
       onCell: () => ({ style: nowrap }),
-      render: (v: string) => v || '—',
+      render: (v: string, r: TubeUsageLog) => {
+        const elementaTypes: Record<string, { label: string; color: string }> = {
+          extraction: { label: 'Extraction', color: 'purple' },
+          pcr: { label: 'PCR', color: 'geekblue' },
+          sanger: { label: 'Sanger', color: 'blue' },
+          library_prep: { label: 'Library Prep', color: 'cyan' },
+        }
+        if (r.molecular_ref && v && elementaTypes[v]) {
+          const { label, color } = elementaTypes[v]
+          return <Tag color={color} style={{ margin: 0 }}>{label}</Tag>
+        }
+        return v || '—'
+      },
     },
     {
       title: 'Breakdown',
@@ -549,24 +561,33 @@ export default function SpecimenDetailPage() {
       render: (_: unknown, r: TubeUsageLog) => r.taken_by?.full_name || '—',
     },
     {
-      title: 'Elementa Ref',
+      title: 'In Elementa',
       dataIndex: 'molecular_ref',
       key: 'molecular_ref',
-      width: 120,
+      width: 160,
       onCell: () => ({ style: nowrap }),
       render: (v: string, record: TubeUsageLog) => {
         const raw = appConfig?.elementa_url?.trim()
         const base = raw && (raw.startsWith('http://') || raw.startsWith('https://')) ? raw.replace(/\/$/, '') : null
         const code = encodeURIComponent(specimen.specimen_code)
         const returnTo = encodeURIComponent(`${window.location.origin}/specimens/${specimenId}`)
+        const runTypeLabels: Record<string, string> = {
+          extraction: 'Extraction',
+          pcr: 'PCR',
+          sanger: 'Sanger',
+          library_prep: 'Library Prep',
+        }
         if (!v) {
           return base
-            ? <Button type="link" style={{ padding: 0, fontSize: 12, color: '#aaa', height: 'auto' }} onClick={() => window.open(`${base}/extraction-runs/new?specimen=${code}&usage_id=${record.id}&return_to=${returnTo}`, '_blank')}>+ New extraction</Button>
+            ? <Button type="link" style={{ padding: 0, fontSize: 12, color: '#aaa', height: 'auto' }} onClick={() => window.open(`${base}/extraction-runs/new?specimen=${code}&usage_id=${record.id}&return_to=${returnTo}`, '_blank')}>Start extraction in Elementa →</Button>
             : '—'
         }
+        const runLabel = record.purpose && runTypeLabels[record.purpose]
+          ? `${runTypeLabels[record.purpose]} Run #${v}`
+          : `Run #${v}`
         return base
-          ? <Tag color="blue" style={{ cursor: 'pointer' }} onClick={() => window.open(`${base}/extraction-runs/${v}?specimen=${code}`, '_blank')}>{v}</Tag>
-          : <Tag color="blue">{v}</Tag>
+          ? <Tag color="geekblue" style={{ cursor: 'pointer' }} onClick={() => window.open(`${base}/extraction-runs/${v}?specimen=${code}`, '_blank')}>{runLabel} ↗</Tag>
+          : <Tag color="geekblue">{runLabel}</Tag>
       },
     },
     { title: 'Notes', dataIndex: 'notes', key: 'notes', ellipsis: true, render: (v: string) => v || '—' },
