@@ -55,8 +55,9 @@ export default function HelpPage() {
           direction="vertical"
           size="small"
           items={[
-            { title: 'Go to Projects', description: 'Click Projects in the sidebar.' },
+            { title: 'Go to Projects', description: 'Click Projects in the sidebar (under Collections).' },
             { title: 'Create a project', description: 'Click Add Project, enter a short code (e.g. AMPH2024) and a name.' },
+            { title: 'Add members', description: 'Use the Members button next to a project to add users. Members are used for access control on protected projects.' },
           ]}
         />
       </Card>
@@ -73,7 +74,7 @@ export default function HelpPage() {
           direction="vertical"
           size="small"
           items={[
-            { title: 'Go to Sites', description: 'Click Sites in the sidebar.' },
+            { title: 'Go to Sites', description: 'Click Sites in the sidebar (under Reference).' },
             { title: 'Add a site', description: 'Enter a name, optional coordinates, habitat type, and tag it to one or more projects.' },
             {
               title: 'Precision levels',
@@ -103,7 +104,7 @@ export default function HelpPage() {
           direction="vertical"
           size="small"
           items={[
-            { title: 'Go to Tubes', description: 'Click Tubes in the sidebar, then + New Tube.' },
+            { title: 'Go to Tubes', description: 'Click Tubes in the sidebar (under Collections), then + New Tube.' },
             { title: 'Select a project', description: 'The tube code is assigned automatically from the project sequence.' },
             { title: 'Fill in metadata', description: 'Collection date, collector, site, sample type, storage location, and quantity.' },
             {
@@ -187,7 +188,7 @@ export default function HelpPage() {
           Export & backup
         </Title>
         <Paragraph style={{ marginBottom: 0 }}>
-          Go to <Text strong>Export</Text> in the sidebar to download specimen data as a CSV (filterable by project, collector, or species). Admins can also download a full database backup or restore from a previous backup.
+          Go to <Text strong>Export</Text> in the sidebar (under Manage) to download specimen data as a CSV (filterable by project, collector, or species). Admins can also download a full database backup or restore from a previous backup.
         </Paragraph>
       </Card>
 
@@ -197,7 +198,7 @@ export default function HelpPage() {
           Protected projects
         </Title>
         <Paragraph style={{ marginBottom: 0 }}>
-          Admins can mark a project as <Text strong>Protected</Text> in Settings → Projects. Protected projects require an explicit per-user access grant — users without access see only tube codes; all other fields are hidden. Sites tagged exclusively to protected projects are also hidden from unauthorised users.
+          Admins can mark a project as <Text strong>Protected</Text> from the Projects page (under Collections) using the lock toggle in the project's edit form. Protected projects require an explicit per-user access grant — users without access see only tube codes; all other fields are hidden. Sites tagged exclusively to protected projects are also hidden from unauthorised users. Use the Members button on the Projects page to add or remove access.
         </Paragraph>
       </Card>
 
