@@ -22,13 +22,21 @@ import { uploadAvatar, getAvatarBlob } from '../../api/users'
 const { Header, Sider, Content } = Layout
 const { Text } = Typography
 
-const menuItems = [
-  { key: '/dashboard', icon: <DashboardOutlined />, label: 'Dashboard' },
+const collectionItems = [
   { key: '/specimens', icon: <ExperimentOutlined />, label: 'Tubes' },
   { key: '/projects', icon: <ProjectOutlined />, label: 'Projects' },
+]
+
+const referenceItems = [
   { key: '/species', icon: <BugOutlined />, label: 'Species' },
-  { key: '/explore', icon: <CompassOutlined />, label: 'Explore' },
   { key: '/sites', icon: <PushpinOutlined />, label: 'Sites' },
+]
+
+const exploreItems = [
+  { key: '/explore', icon: <CompassOutlined />, label: 'Explore' },
+]
+
+const manageItems = [
   { key: '/export', icon: <ExportOutlined />, label: 'Export' },
 ]
 
@@ -40,6 +48,20 @@ const adminItems = [
 const bottomItems = [
   { key: '/help', icon: <QuestionCircleOutlined />, label: 'Help' },
 ]
+
+function buildMenuItems(isAdmin: boolean) {
+  return [
+    { key: '/dashboard', icon: <DashboardOutlined />, label: 'Dashboard' },
+    { type: 'group' as const, label: 'Collections', children: collectionItems },
+    { type: 'group' as const, label: 'Reference', children: referenceItems },
+    { type: 'group' as const, label: 'Explore', children: exploreItems },
+    {
+      type: 'group' as const,
+      label: 'Manage',
+      children: isAdmin ? [...manageItems, ...adminItems] : manageItems,
+    },
+  ]
+}
 
 export default function AppShell() {
   const navigate = useNavigate()
@@ -71,10 +93,17 @@ export default function AppShell() {
     e.target.value = ''
   }
 
-  const allItems = user?.is_admin ? [...menuItems, ...adminItems] : menuItems
+  const allItems = buildMenuItems(!!user?.is_admin)
+
+  const allLeafKeys = [
+    { key: '/dashboard' },
+    ...collectionItems, ...referenceItems, ...exploreItems, ...manageItems,
+    ...(user?.is_admin ? adminItems : []),
+    ...bottomItems,
+  ]
 
   const selectedKey =
-    [...allItems, ...bottomItems].find((item) => location.pathname.startsWith(item.key))?.key || '/dashboard'
+    allLeafKeys.find((item) => location.pathname.startsWith(item.key))?.key || '/dashboard'
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
