@@ -2,8 +2,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, EmailStr
 from ..dependencies import get_db
-from ..schemas.user import UserCreate
-from ..crud.user import get_user_by_username, get_user_by_email, create_user
+from ..crud.user import get_user_by_username, get_user_by_email
 from ..config import settings
 
 router = APIRouter(prefix="/setup", tags=["setup"])
@@ -32,13 +31,18 @@ def complete_setup(data: SetupData, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Username already taken")
     if get_user_by_email(db, data.email):
         raise HTTPException(status_code=400, detail="Email already registered")
-    create_user(db, UserCreate(
+    from ..security import get_password_hash
+    from ..models.user import User as UserModel
+    # Create the new admin and remove the default seed account in one transaction
+    # so the system can never be left without an admin if something fails mid-way.
+    new_admin = UserModel(
         username=data.username,
         full_name=data.full_name,
         email=data.email,
-        password=data.password,
+        hashed_password=get_password_hash(data.password),
         is_admin=True,
-    ))
+    )
+    db.add(new_admin)
     db.delete(default_admin)
     db.commit()
     return {"ok": True}

@@ -258,7 +258,9 @@ def delete_specimen(db: Session, specimen: Specimen):
 def get_specimens_for_export(
     db: Session, project_id=None, collector_id=None, species_id=None
 ) -> List[Specimen]:
+    from ..models.tube_usage_log import TubeUsageLog
     query = _build_base_query(
         db, project_id=project_id, collector_id=collector_id, species_id=species_id
     )
+    query = query.options(joinedload(Specimen.usage_log))
     return query.all()

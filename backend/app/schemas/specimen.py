@@ -58,6 +58,8 @@ class SpecimenBase(BaseModel):
     collection_lon: Optional[float] = None
     collection_location_text: Optional[str] = None
     storage_location: Optional[str] = None
+    preservation_method: Optional[str] = None
+    status: str = "active"
     notes: Optional[str] = None
 
 
@@ -82,6 +84,8 @@ class SpecimenUpdate(BaseModel):
     collection_lon: Optional[float] = None
     collection_location_text: Optional[str] = None
     storage_location: Optional[str] = None
+    preservation_method: Optional[str] = None
+    status: Optional[str] = None
     notes: Optional[str] = None
     species_associations: Optional[List[SpecimenSpeciesCreate]] = None
 

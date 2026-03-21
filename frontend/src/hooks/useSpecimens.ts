@@ -5,6 +5,7 @@ import {
   createSpecimen,
   updateSpecimen,
   deleteSpecimen,
+  getSpecimenStats,
 } from '../api/specimens'
 import type { SpecimenFilters, SpecimenCreate, SpecimenUpdate } from '../types'
 
@@ -46,4 +47,8 @@ export const useDeleteSpecimen = () => {
     mutationFn: (id: number) => deleteSpecimen(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['specimens'] }),
   })
+}
+
+export function useSpecimenStats() {
+  return useQuery({ queryKey: ['specimen_stats'], queryFn: getSpecimenStats, staleTime: 60_000 })
 }

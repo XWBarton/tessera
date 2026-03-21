@@ -84,6 +84,8 @@ export default function SpecimenFormPage() {
         collection_lon: specimen.collection_lon,
         collection_location_text: specimen.collection_location_text,
         storage_location: specimen.storage_location,
+        preservation_method: specimen.preservation_method,
+        status: specimen.status || 'active',
         notes: specimen.notes,
         species_associations: specimen.species_associations.map((a) => ({
           species_id: a.species_id,
@@ -157,6 +159,8 @@ export default function SpecimenFormPage() {
           collection_lon: values.collection_lon as number | undefined,
           collection_location_text: values.collection_location_text as string | undefined,
           storage_location: values.storage_location as string | undefined,
+          preservation_method: values.preservation_method as string | undefined,
+          status: values.status as string | undefined,
           notes: values.notes as string | undefined,
           species_associations: speciesAssociations,
         }
@@ -179,6 +183,8 @@ export default function SpecimenFormPage() {
           collection_lon: values.collection_lon as number | undefined,
           collection_location_text: values.collection_location_text as string | undefined,
           storage_location: values.storage_location as string | undefined,
+          preservation_method: values.preservation_method as string | undefined,
+          status: values.status as string | undefined,
           notes: values.notes as string | undefined,
           species_associations: speciesAssociations,
         }
@@ -372,6 +378,39 @@ export default function SpecimenFormPage() {
           <Form.Item name="storage_location" label="Storage Location">
             <Input placeholder="e.g. Freezer-A1, Shelf-3" />
           </Form.Item>
+
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item name="preservation_method" label="Preservation Method">
+                <Select
+                  placeholder="Select method"
+                  allowClear
+                  options={[
+                    { value: 'Ethanol', label: 'Ethanol' },
+                    { value: 'RNAlater', label: 'RNAlater' },
+                    { value: 'Frozen (-20°C)', label: 'Frozen (-20°C)' },
+                    { value: 'Frozen (-80°C)', label: 'Frozen (-80°C)' },
+                    { value: 'Dried', label: 'Dried' },
+                    { value: 'Formalin', label: 'Formalin' },
+                    { value: 'Other', label: 'Other' },
+                  ]}
+                />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="status" label="Status">
+                <Select
+                  options={[
+                    { value: 'active', label: 'Active' },
+                    { value: 'depleted', label: 'Depleted' },
+                    { value: 'loaned', label: 'Loaned' },
+                    { value: 'vouchered', label: 'Vouchered' },
+                    { value: 'destroyed', label: 'Destroyed' },
+                  ]}
+                />
+              </Form.Item>
+            </Col>
+          </Row>
 
           <Form.Item name="notes" label="Notes">
             <Input.TextArea rows={3} />

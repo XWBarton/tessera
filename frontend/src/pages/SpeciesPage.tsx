@@ -13,7 +13,7 @@ export default function SpeciesPage() {
   const [modalOpen, setModalOpen] = useState(false)
   const [form] = Form.useForm()
 
-  const handleCreate = async (values: { scientific_name: string; common_name?: string; notes?: string }) => {
+  const handleCreate = async (values: { scientific_name: string; common_name?: string; notes?: string; genus?: string; family?: string; order_name?: string; taxon_id?: string }) => {
     try {
       await createSpecies.mutateAsync(values)
       message.success('Species added')
@@ -36,6 +36,30 @@ export default function SpeciesPage() {
       title: 'Common Name',
       dataIndex: 'common_name',
       key: 'common_name',
+      render: (v: string) => v || '—',
+    },
+    {
+      title: 'Genus',
+      dataIndex: 'genus',
+      key: 'genus',
+      render: (v: string) => v || '—',
+    },
+    {
+      title: 'Family',
+      dataIndex: 'family',
+      key: 'family',
+      render: (v: string) => v || '—',
+    },
+    {
+      title: 'Order',
+      dataIndex: 'order_name',
+      key: 'order_name',
+      render: (v: string) => v || '—',
+    },
+    {
+      title: 'Taxon ID',
+      dataIndex: 'taxon_id',
+      key: 'taxon_id',
       render: (v: string) => v || '—',
     },
     {
@@ -84,6 +108,18 @@ export default function SpeciesPage() {
           </Form.Item>
           <Form.Item name="common_name" label="Common Name">
             <Input placeholder="e.g. Ornate Kangaroo Tick" />
+          </Form.Item>
+          <Form.Item name="genus" label="Genus">
+            <Input placeholder="e.g. Amblyomma" />
+          </Form.Item>
+          <Form.Item name="family" label="Family">
+            <Input placeholder="e.g. Ixodidae" />
+          </Form.Item>
+          <Form.Item name="order_name" label="Order">
+            <Input placeholder="e.g. Ixodida" />
+          </Form.Item>
+          <Form.Item name="taxon_id" label="Taxon ID">
+            <Input placeholder="e.g. NCBI:123456" />
           </Form.Item>
           <Form.Item name="notes" label="Notes">
             <Input.TextArea rows={2} />

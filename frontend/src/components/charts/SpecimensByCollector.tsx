@@ -9,19 +9,22 @@ import {
 import type { Specimen } from '../../types'
 
 interface Props {
-  specimens: Specimen[]
+  specimens?: Specimen[]
+  data?: { name: string; value: number }[]
 }
 
 
-export default function SpecimensByCollector({ specimens }: Props) {
-  const counts: Record<string, number> = {}
-  specimens.forEach((s) => {
-    const key = s.collector?.full_name || 'Unknown'
-    counts[key] = (counts[key] || 0) + 1
-  })
-  const data = Object.entries(counts)
-    .map(([name, value]) => ({ name, value }))
-    .sort((a, b) => b.value - a.value)
+export default function SpecimensByCollector({ specimens, data: dataProp }: Props) {
+  const data = dataProp ?? (() => {
+    const counts: Record<string, number> = {}
+    ;(specimens ?? []).forEach((s) => {
+      const key = s.collector?.full_name || 'Unknown'
+      counts[key] = (counts[key] || 0) + 1
+    })
+    return Object.entries(counts)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+  })()
 
   return (
     <ResponsiveContainer width="100%" height={300}>

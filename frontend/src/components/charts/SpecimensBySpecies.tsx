@@ -2,7 +2,8 @@ import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from 'recha
 import type { Specimen } from '../../types'
 
 interface Props {
-  specimens: Specimen[]
+  specimens?: Specimen[]
+  data?: { name: string; value: number }[]
 }
 
 const COLORS = [
@@ -18,22 +19,24 @@ const COLORS = [
   '#ef4444',
 ]
 
-export default function SpecimensBySpecies({ specimens }: Props) {
-  const counts: Record<string, number> = {}
-  specimens.forEach((s) => {
-    if (s.species_associations.length === 0) {
-      counts['No species'] = (counts['No species'] || 0) + 1
-    } else {
-      s.species_associations.forEach((a) => {
-        const key = a.species?.scientific_name || a.free_text_species || 'Unknown'
-        counts[key] = (counts[key] || 0) + 1
-      })
-    }
-  })
-  const data = Object.entries(counts)
-    .map(([name, value]) => ({ name, value }))
-    .sort((a, b) => b.value - a.value)
-    .slice(0, 10)
+export default function SpecimensBySpecies({ specimens, data: dataProp }: Props) {
+  const data = dataProp ?? (() => {
+    const counts: Record<string, number> = {}
+    ;(specimens ?? []).forEach((s) => {
+      if (s.species_associations.length === 0) {
+        counts['No species'] = (counts['No species'] || 0) + 1
+      } else {
+        s.species_associations.forEach((a) => {
+          const key = a.species?.scientific_name || a.free_text_species || 'Unknown'
+          counts[key] = (counts[key] || 0) + 1
+        })
+      }
+    })
+    return Object.entries(counts)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 10)
+  })()
 
   return (
     <ResponsiveContainer width="100%" height={250}>

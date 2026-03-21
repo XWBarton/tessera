@@ -24,6 +24,10 @@ export interface Species {
   scientific_name: string
   common_name?: string
   notes?: string
+  genus?: string
+  family?: string
+  order_name?: string
+  taxon_id?: string
   created_at: string
 }
 
@@ -78,6 +82,8 @@ export interface Specimen {
   collection_lon?: number
   collection_location_text?: string
   storage_location?: string
+  preservation_method?: string
+  status?: string
   notes?: string
   created_at: string
   updated_at: string
@@ -126,6 +132,8 @@ export interface SpecimenCreate {
   collection_lon?: number
   collection_location_text?: string
   storage_location?: string
+  preservation_method?: string
+  status?: string
   notes?: string
   species_associations: SpecimenSpeciesCreate[]
 }
@@ -146,6 +154,8 @@ export interface SpecimenUpdate {
   collection_lon?: number
   collection_location_text?: string
   storage_location?: string
+  preservation_method?: string
+  status?: string
   notes?: string
   species_associations?: SpecimenSpeciesCreate[]
 }

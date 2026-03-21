@@ -45,6 +45,12 @@ def run_migrations():
             ("sample_types", "is_specimen", "INTEGER DEFAULT 0",
              "UPDATE sample_types SET is_specimen = 1 WHERE name IN ('Voucher Specimens', 'Specimen')"),
             ("projects", "is_protected", "INTEGER NOT NULL DEFAULT 0", None),
+            ("specimens", "preservation_method", "TEXT", None),
+            ("specimens", "status", "TEXT NOT NULL DEFAULT 'active'", None),
+            ("species", "genus", "TEXT", None),
+            ("species", "family", "TEXT", None),
+            ("species", "order_name", "TEXT", None),
+            ("species", "taxon_id", "TEXT", None),
         ]
         for migration in add_column_migrations:
             table, column, col_def = migration[0], migration[1], migration[2]

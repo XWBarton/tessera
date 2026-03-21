@@ -11,7 +11,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip as RTooltip, ResponsiveContainer,
 } from 'recharts'
-import { useSpecimens } from '../hooks/useSpecimens'
+import { useSpecimenStats } from '../hooks/useSpecimens'
 import { useProjects } from '../hooks/useProjects'
 import { useUsers } from '../hooks/useUsers'
 import SpecimensByProject from '../components/charts/SpecimensByProject'
@@ -60,16 +60,18 @@ function loadEnabled(): WidgetKey[] {
 
 // ── Inline widget components ───────────────────────────────────────────────
 
-function CollectorLeaderboard({ specimens }: { specimens: Specimen[] }) {
-  const counts: Record<string, number> = {}
-  specimens.forEach((s) => {
-    const key = s.collector?.full_name || s.collector_name || 'Unknown'
-    counts[key] = (counts[key] || 0) + 1
-  })
-  const data = Object.entries(counts)
-    .map(([name, value]) => ({ name, value }))
-    .sort((a, b) => b.value - a.value)
-    .slice(0, 10)
+function CollectorLeaderboard({ specimens, data: dataProp }: { specimens?: Specimen[]; data?: { name: string; value: number }[] }) {
+  const data = dataProp ?? (() => {
+    const counts: Record<string, number> = {}
+    ;(specimens ?? []).forEach((s) => {
+      const key = s.collector?.full_name || s.collector_name || 'Unknown'
+      counts[key] = (counts[key] || 0) + 1
+    })
+    return Object.entries(counts)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 10)
+  })()
 
   return (
     <ResponsiveContainer width="100%" height={300}>
@@ -92,7 +94,7 @@ function CollectorLeaderboard({ specimens }: { specimens: Specimen[] }) {
 function RecentAdditions({ specimens }: { specimens: Specimen[] }) {
   const navigate = useNavigate()
   const recent = useMemo(
-    () => [...specimens].sort((a, b) => b.created_at.localeCompare(a.created_at)).slice(0, 10),
+    () => specimens,
     [specimens],
   )
   return (
@@ -120,10 +122,7 @@ function RecentAdditions({ specimens }: { specimens: Specimen[] }) {
 function LowQuantityAlerts({ specimens }: { specimens: Specimen[] }) {
   const navigate = useNavigate()
   const lowQty = useMemo(
-    () => specimens
-      .filter((s) => s.quantity_value && s.quantity_remaining != null && s.quantity_remaining / s.quantity_value < 0.25)
-      .sort((a, b) => (a.quantity_remaining! / a.quantity_value!) - (b.quantity_remaining! / b.quantity_value!))
-      .slice(0, 20),
+    () => specimens,
     [specimens],
   )
 
@@ -180,15 +179,11 @@ export default function DashboardPage() {
   const [dragKey, setDragKey] = useState<WidgetKey | null>(null)
   const [dragOver, setDragOver] = useState<WidgetKey | null>(null)
 
-  const { data: specimensData, isLoading } = useSpecimens({ limit: 1000 })
+  const { data: stats, isLoading } = useSpecimenStats()
   const { data: projects } = useProjects()
   const { data: users } = useUsers()
 
   if (isLoading) return <Spin />
-
-  const specimens = specimensData?.items || []
-  const thisMonth = new Date().toISOString().substring(0, 7)
-  const thisMonthCount = specimens.filter((s) => s.collection_date?.startsWith(thisMonth)).length
 
   const statWidgets = enabled.filter((k) => WIDGETS.find((w) => w.key === k && w.type === 'stat'))
   const halfWidgets = enabled.filter((k) => WIDGETS.find((w) => w.key === k && w.type === 'half'))
@@ -252,13 +247,13 @@ export default function DashboardPage() {
     const s = { height: '100%' }
     switch (key) {
       case 'stat_total_tubes':
-        return <Card style={s}><Statistic title="Total Tubes" value={specimensData?.total || 0} prefix={<ExperimentOutlined />} valueStyle={{ color: '#2e7d32' }} /></Card>
+        return <Card style={s}><Statistic title="Total Tubes" value={stats?.total || 0} prefix={<ExperimentOutlined />} valueStyle={{ color: '#2e7d32' }} /></Card>
       case 'stat_projects':
         return <Card style={s}><Statistic title="Projects" value={projects?.length || 0} prefix={<ProjectOutlined />} /></Card>
       case 'stat_team':
         return <Card style={s}><Statistic title="Team Members" value={users?.length || 0} prefix={<TeamOutlined />} /></Card>
       case 'stat_this_month':
-        return <Card style={s}><Statistic title="Tubes This Month" value={thisMonthCount} prefix={<CalendarOutlined />} valueStyle={{ color: '#1677ff' }} /></Card>
+        return <Card style={s}><Statistic title="Tubes This Month" value={stats?.this_month || 0} prefix={<CalendarOutlined />} valueStyle={{ color: '#1677ff' }} /></Card>
       default: return null
     }
   }
@@ -267,13 +262,13 @@ export default function DashboardPage() {
     const title = WIDGETS.find((w) => w.key === key)?.title || ''
     let content: ReactNode
     switch (key) {
-      case 'chart_by_project':   content = <SpecimensByProject specimens={specimens} />; break
-      case 'chart_by_collector': content = <SpecimensByCollector specimens={specimens} />; break
-      case 'chart_by_month':     content = <SpecimensByMonth specimens={specimens} />; break
-      case 'chart_by_species':   content = <SpecimensBySpecies specimens={specimens} />; break
-      case 'chart_sample_type':  content = <SampleTypeSplit specimens={specimens} />; break
-      case 'chart_leaderboard':  content = <CollectorLeaderboard specimens={specimens} />; break
-      case 'chart_storage':      content = <StorageUsageChart specimens={specimens} />; break
+      case 'chart_by_project':   content = <SpecimensByProject data={stats?.by_project} />; break
+      case 'chart_by_collector': content = <SpecimensByCollector data={stats?.by_collector} />; break
+      case 'chart_by_month':     content = <SpecimensByMonth data={stats?.by_month} />; break
+      case 'chart_by_species':   content = <SpecimensBySpecies data={stats?.by_species} />; break
+      case 'chart_sample_type':  content = <SampleTypeSplit data={stats?.by_sample_type} />; break
+      case 'chart_leaderboard':  content = <CollectorLeaderboard data={stats?.by_collector} />; break
+      case 'chart_storage':      content = <StorageUsageChart data={stats?.by_storage} />; break
       default: return null
     }
     return <Card title={title}>{content}</Card>
@@ -283,8 +278,8 @@ export default function DashboardPage() {
     const title = WIDGETS.find((w) => w.key === key)?.title || ''
     let content: ReactNode
     switch (key) {
-      case 'list_recent':  content = <RecentAdditions specimens={specimens} />; break
-      case 'list_low_qty': content = <LowQuantityAlerts specimens={specimens} />; break
+      case 'list_recent':  content = <RecentAdditions specimens={stats?.recent ?? []} />; break
+      case 'list_low_qty': content = <LowQuantityAlerts specimens={stats?.low_qty ?? []} />; break
       default: return null
     }
     return <Card title={title}>{content}</Card>

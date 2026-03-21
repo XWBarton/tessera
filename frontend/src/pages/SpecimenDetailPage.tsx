@@ -203,13 +203,15 @@ export default function SpecimenDetailPage() {
   // Auto-open Record Usage when arriving from Elementa with ?elementa_ref=...
   const elementaRef = searchParams.get('elementa_ref')
   const elementaRunType = searchParams.get('run_type')
+  const elementaQty = searchParams.get('input_quantity')
+  const elementaQtyUnit = searchParams.get('input_quantity_unit')
   useEffect(() => {
     if (!elementaRef || !specimen) return
     setBreakdownCounts({})
     usageForm.setFieldsValue({
       date: dayjs(),
-      unit: specimen.quantity_unit || '',
-      quantity_taken: undefined,
+      unit: elementaQtyUnit || specimen.quantity_unit || '',
+      quantity_taken: elementaQty ? parseFloat(elementaQty) : undefined,
       molecular_ref: elementaRef,
       purpose: elementaRunType ?? undefined,
     })
@@ -748,6 +750,22 @@ export default function SpecimenDetailPage() {
           </Descriptions.Item>
           <Descriptions.Item label="Storage">
             {specimen.storage_location || '—'}
+          </Descriptions.Item>
+          <Descriptions.Item label="Preservation">
+            {specimen.preservation_method || '—'}
+          </Descriptions.Item>
+          <Descriptions.Item label="Status">
+            {(() => {
+              const colorMap: Record<string, string> = {
+                active: 'green',
+                depleted: 'orange',
+                loaned: 'blue',
+                vouchered: 'purple',
+                destroyed: 'red',
+              }
+              const s = specimen.status || 'active'
+              return <Tag color={colorMap[s] || 'default'}>{s}</Tag>
+            })()}
           </Descriptions.Item>
           <Descriptions.Item label="Species">
             {specimen.species_associations.length === 0 ? '—' : (() => {

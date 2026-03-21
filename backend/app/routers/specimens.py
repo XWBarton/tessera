@@ -1,11 +1,12 @@
 import io
 import csv
-import mimetypes
 import os
 import uuid
+from typing import Optional
 from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from fastapi.responses import StreamingResponse, FileResponse
+from sqlalchemy import func as sql_func
 from sqlalchemy.orm import Session, joinedload
 from ..dependencies import get_db, get_current_user, require_admin
 from ..crud.specimen import (
@@ -34,6 +35,8 @@ class ElementaLinkPayload(BaseModel):
     specimen_code: str
     elementa_ref: str
     run_type: str
+    input_quantity: Optional[float] = None
+    input_quantity_unit: Optional[str] = None
 
 
 class ElementaUnlinkPayload(BaseModel):
@@ -64,6 +67,33 @@ def _has_access(project, user) -> bool:
     if user.is_admin:
         return True
     return any(u.id == user.id for u in project.allowed_users)
+
+
+def _mask_restricted_specimen(d: dict) -> dict:
+    """Zero out sensitive fields for specimens in protected projects the user cannot access."""
+    d.update({
+        "collection_date": None,
+        "collection_date_end": None,
+        "collector_id": None,
+        "collector_name": None,
+        "collector": None,
+        "entered_by": None,
+        "site_ids": [],
+        "sites": [],
+        "sample_type_id": None,
+        "sample_type": None,
+        "quantity_value": None,
+        "quantity_unit": None,
+        "quantity_remaining": None,
+        "collection_lat": None,
+        "collection_lon": None,
+        "collection_location_text": None,
+        "storage_location": None,
+        "notes": None,
+        "species_associations": [],
+        "restricted": True,
+    })
+    return d
 
 
 def _label_fields(specimen):
@@ -224,28 +254,7 @@ def list_specimens(
     for item in items:
         d = SpecimenDetail.model_validate(item).model_dump()
         if not _has_access(item.project, current_user):
-            d.update({
-                "collection_date": None,
-                "collection_date_end": None,
-                "collector_id": None,
-                "collector_name": None,
-                "collector": None,
-                "entered_by": None,
-                "site_ids": [],
-                "sites": [],
-                "sample_type_id": None,
-                "sample_type": None,
-                "quantity_value": None,
-                "quantity_unit": None,
-                "quantity_remaining": None,
-                "collection_lat": None,
-                "collection_lon": None,
-                "collection_location_text": None,
-                "storage_location": None,
-                "notes": None,
-                "species_associations": [],
-                "restricted": True,
-            })
+            d = _mask_restricted_specimen(d)
         serialized.append(d)
     return {"items": serialized, "total": total, "skip": skip, "limit": limit}
 
@@ -276,6 +285,147 @@ def find_by_code(code: str, db: Session = Depends(get_db), _: User = Depends(get
     return {"id": specimen.id}
 
 
+@router.get("/stats")
+def get_specimen_stats(
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    from ..models.specimen import Specimen as SpecimenModel
+    from ..models.specimen_species import SpecimenSpecies as SpecimenSpeciesModel
+    from ..models.species import Species as SpeciesModel
+    from ..models.sample_type import SampleType as SampleTypeModel
+    from ..models.user import User as UserModel
+    from ..models.project import Project as ProjectModel
+    from datetime import date
+
+    # Total count
+    total = db.query(sql_func.count(SpecimenModel.id)).scalar()
+
+    # This month count (by collection_date)
+    today = date.today()
+    month_start = today.replace(day=1)
+    this_month = db.query(sql_func.count(SpecimenModel.id)).filter(
+        SpecimenModel.collection_date >= month_start
+    ).scalar()
+
+    # By project
+    by_project_rows = (
+        db.query(ProjectModel.code, sql_func.count(SpecimenModel.id))
+        .join(SpecimenModel, SpecimenModel.project_id == ProjectModel.id)
+        .group_by(ProjectModel.code)
+        .order_by(sql_func.count(SpecimenModel.id).desc())
+        .all()
+    )
+    by_project = [{"name": r[0], "value": r[1]} for r in by_project_rows]
+
+    # By collector
+    by_collector_rows = (
+        db.query(
+            sql_func.coalesce(UserModel.full_name, SpecimenModel.collector_name, "Unknown"),
+            sql_func.count(SpecimenModel.id)
+        )
+        .outerjoin(UserModel, SpecimenModel.collector_id == UserModel.id)
+        .group_by(sql_func.coalesce(UserModel.full_name, SpecimenModel.collector_name, "Unknown"))
+        .order_by(sql_func.count(SpecimenModel.id).desc())
+        .all()
+    )
+    by_collector = [{"name": r[0], "value": r[1]} for r in by_collector_rows]
+
+    # By month (collection_date YYYY-MM)
+    by_month_rows = (
+        db.query(
+            sql_func.strftime('%Y-%m', SpecimenModel.collection_date),
+            sql_func.count(SpecimenModel.id)
+        )
+        .filter(SpecimenModel.collection_date.isnot(None))
+        .group_by(sql_func.strftime('%Y-%m', SpecimenModel.collection_date))
+        .order_by(sql_func.strftime('%Y-%m', SpecimenModel.collection_date))
+        .all()
+    )
+    by_month = [{"name": r[0], "value": r[1]} for r in by_month_rows if r[0]]
+
+    # By species
+    by_species_rows = (
+        db.query(
+            sql_func.coalesce(SpeciesModel.scientific_name, SpecimenSpeciesModel.free_text_species, "Unknown"),
+            sql_func.count(SpecimenModel.id.distinct())
+        )
+        .join(SpecimenSpeciesModel, SpecimenSpeciesModel.specimen_id == SpecimenModel.id)
+        .outerjoin(SpeciesModel, SpecimenSpeciesModel.species_id == SpeciesModel.id)
+        .group_by(sql_func.coalesce(SpeciesModel.scientific_name, SpecimenSpeciesModel.free_text_species, "Unknown"))
+        .order_by(sql_func.count(SpecimenModel.id.distinct()).desc())
+        .limit(20)
+        .all()
+    )
+    by_species = [{"name": r[0], "value": r[1]} for r in by_species_rows]
+
+    # By sample type
+    by_type_rows = (
+        db.query(
+            sql_func.coalesce(SampleTypeModel.name, "Unknown"),
+            sql_func.count(SpecimenModel.id)
+        )
+        .outerjoin(SampleTypeModel, SpecimenModel.sample_type_id == SampleTypeModel.id)
+        .group_by(sql_func.coalesce(SampleTypeModel.name, "Unknown"))
+        .order_by(sql_func.count(SpecimenModel.id).desc())
+        .all()
+    )
+    by_sample_type = [{"name": r[0], "value": r[1]} for r in by_type_rows]
+
+    # By storage location
+    by_storage_rows = (
+        db.query(
+            sql_func.coalesce(SpecimenModel.storage_location, "No location"),
+            sql_func.count(SpecimenModel.id)
+        )
+        .group_by(sql_func.coalesce(SpecimenModel.storage_location, "No location"))
+        .order_by(sql_func.count(SpecimenModel.id).desc())
+        .limit(15)
+        .all()
+    )
+    by_storage = [{"name": r[0], "value": r[1]} for r in by_storage_rows]
+
+    # Recent 10 specimens
+    from ..crud.specimen import get_specimens
+    recent_items, _ = get_specimens(db, skip=0, limit=10, sort_by="created_at", sort_dir="desc")
+    recent = [SpecimenDetail.model_validate(s) for s in recent_items]
+
+    # Low qty specimens (remaining < 25% of original)
+    low_qty_items = (
+        db.query(SpecimenModel)
+        .filter(
+            SpecimenModel.quantity_value.isnot(None),
+            SpecimenModel.quantity_remaining.isnot(None),
+            SpecimenModel.quantity_value > 0,
+            SpecimenModel.quantity_remaining < SpecimenModel.quantity_value * 0.25,
+        )
+        .order_by((SpecimenModel.quantity_remaining / SpecimenModel.quantity_value))
+        .limit(20)
+        .all()
+    )
+    low_qty_ids = [s.id for s in low_qty_items]
+    low_qty_loaded = []
+    if low_qty_ids:
+        from ..crud.specimen import get_specimen
+        for sid in low_qty_ids:
+            s = get_specimen(db, sid)
+            if s:
+                low_qty_loaded.append(SpecimenDetail.model_validate(s))
+
+    return {
+        "total": total,
+        "this_month": this_month,
+        "by_project": by_project,
+        "by_collector": by_collector,
+        "by_month": by_month,
+        "by_species": by_species,
+        "by_sample_type": by_sample_type,
+        "by_storage": by_storage,
+        "recent": [r.model_dump() for r in recent],
+        "low_qty": [s.model_dump() for s in low_qty_loaded],
+    }
+
+
 @router.get("/{specimen_id}", response_model=SpecimenDetail)
 def read_specimen(
     specimen_id: int,
@@ -286,30 +436,7 @@ def read_specimen(
     if not specimen:
         raise HTTPException(status_code=404, detail="Specimen not found")
     if not _has_access(specimen.project, current_user):
-        d = SpecimenDetail.model_validate(specimen).model_dump()
-        d.update({
-            "collection_date": None,
-            "collection_date_end": None,
-            "collector_id": None,
-            "collector_name": None,
-            "collector": None,
-            "entered_by": None,
-            "site_ids": [],
-            "sites": [],
-            "sample_type_id": None,
-            "sample_type": None,
-            "quantity_value": None,
-            "quantity_unit": None,
-            "quantity_remaining": None,
-            "collection_lat": None,
-            "collection_lon": None,
-            "collection_location_text": None,
-            "storage_location": None,
-            "notes": None,
-            "species_associations": [],
-            "restricted": True,
-        })
-        return d
+        return _mask_restricted_specimen(SpecimenDetail.model_validate(specimen).model_dump())
     return specimen
 
 
@@ -404,8 +531,8 @@ def link_elementa_run(
     usage = TubeUsageLog(
         specimen_id=specimen.id,
         date=date.today(),
-        quantity_taken=0,
-        unit="Elementa",
+        quantity_taken=payload.input_quantity or 0,
+        unit=payload.input_quantity_unit or "Elementa",
         purpose=payload.run_type,
         taken_by_id=current_user.id,
         molecular_ref=payload.elementa_ref,

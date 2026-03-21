@@ -39,7 +39,12 @@ def _specimens_to_csv(specimens) -> str:
         "collection_lon",
         "collection_location_text",
         "storage_location",
+        "preservation_method",
+        "status",
         "notes",
+        "usage_count",
+        "total_consumed",
+        "last_used_date",
     ]
     species_fields = []
     for i in range(1, max_species + 1):
@@ -69,7 +74,12 @@ def _specimens_to_csv(specimens) -> str:
             "collection_lon": s.collection_lon if s.collection_lon is not None else "",
             "collection_location_text": s.collection_location_text or "",
             "storage_location": s.storage_location or "",
+            "preservation_method": s.preservation_method or "",
+            "status": s.status or "active",
             "notes": s.notes or "",
+            "usage_count": len(s.usage_log),
+            "total_consumed": sum(u.quantity_taken for u in s.usage_log if u.quantity_taken and not u.non_destructive),
+            "last_used_date": str(max((u.date for u in s.usage_log if u.date), default="")) if s.usage_log else "",
         }
         for i, assoc in enumerate(s.species_associations, 1):
             name = (

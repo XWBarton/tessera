@@ -1,6 +1,24 @@
 import apiClient from './client'
 import type { Specimen, SpecimenList, SpecimenCreate, SpecimenUpdate, SpecimenFilters, SpecimenPhoto, BulkImportRow, BulkImportResult } from '../types'
 
+export interface SpecimenStats {
+  total: number
+  this_month: number
+  by_project: { name: string; value: number }[]
+  by_collector: { name: string; value: number }[]
+  by_month: { name: string; value: number }[]
+  by_species: { name: string; value: number }[]
+  by_sample_type: { name: string; value: number }[]
+  by_storage: { name: string; value: number }[]
+  recent: Specimen[]
+  low_qty: Specimen[]
+}
+
+export async function getSpecimenStats(): Promise<SpecimenStats> {
+  const res = await apiClient.get('/specimens/stats')
+  return res.data
+}
+
 export const getSpecimens = async (filters: SpecimenFilters = {}): Promise<SpecimenList> => {
   const { data } = await apiClient.get<SpecimenList>('/specimens/', { params: filters })
   return data
