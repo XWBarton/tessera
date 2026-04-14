@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException
+import csv
+import io
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
 from ..dependencies import get_db, get_current_user, require_admin
 from ..crud.species import (
@@ -9,6 +11,7 @@ from ..crud.species import (
     update_species,
     delete_species,
     get_species_by_name,
+    bulk_create_species,
 )
 from ..schemas.species import SpeciesRead, SpeciesCreate, SpeciesUpdate
 from ..models.user import User
@@ -67,6 +70,34 @@ def update_existing_species(
     if not species:
         raise HTTPException(status_code=404, detail="Species not found")
     return update_species(db, species, species_update)
+
+
+@router.post("/bulk-import")
+async def bulk_import_species(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    if not file.filename or not file.filename.lower().endswith(".csv"):
+        raise HTTPException(status_code=400, detail="File must be a .csv")
+
+    content = await file.read()
+    try:
+        text = content.decode("utf-8-sig")  # handles BOM from Excel
+    except UnicodeDecodeError:
+        raise HTTPException(status_code=400, detail="File must be UTF-8 encoded")
+
+    reader = csv.DictReader(io.StringIO(text))
+    if reader.fieldnames is None or "scientific_name" not in [f.strip() for f in reader.fieldnames]:
+        raise HTTPException(
+            status_code=400,
+            detail="CSV must have a 'scientific_name' column",
+        )
+
+    # Normalise header names in case of leading/trailing spaces
+    rows = [{k.strip(): v for k, v in row.items()} for row in reader]
+    result = bulk_create_species(db, rows)
+    return result
 
 
 @router.delete("/{species_id}")

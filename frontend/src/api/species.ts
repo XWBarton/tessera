@@ -28,3 +28,14 @@ export const updateSpecies = async (
 export const deleteSpecies = async (id: number): Promise<void> => {
   await apiClient.delete(`/species/${id}`)
 }
+
+export const importSpeciesCSV = async (
+  file: File
+): Promise<{ created: number; skipped: number; errors: string[] }> => {
+  const form = new FormData()
+  form.append('file', file)
+  const { data } = await apiClient.post('/species/bulk-import', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+  return data
+}
