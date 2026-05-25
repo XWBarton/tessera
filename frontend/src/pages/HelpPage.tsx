@@ -107,7 +107,7 @@ export default function HelpPage() {
         },
         {
           key: 'tubes',
-          searchText: 'record tubes specimen sample collection date collector site storage location quantity species associations life stage sex confidence new tube create add how to add a specimen vial container tissue',
+          searchText: 'record tubes specimen sample collection date collector site storage location quantity species associations life stage sex confidence new tube create add how to add a specimen vial container tissue preservation method status host organism additional projects location notes geo_loc_name active depleted loaned vouchered destroyed ethanol rnalater frozen',
           node: (
             <Card style={{ marginBottom: 24 }}>
               <Title level={4} style={{ marginTop: 0 }}>
@@ -124,6 +124,22 @@ export default function HelpPage() {
                   { title: 'Go to Tubes', description: 'Click Tubes in the sidebar (under Collections), then + New Tube.' },
                   { title: 'Select a project', description: 'The tube code is assigned automatically from the project sequence.' },
                   { title: 'Fill in metadata', description: 'Collection date, collector, site, sample type, storage location, and quantity.' },
+                  {
+                    title: 'Preservation & status',
+                    description: 'Set Preservation Method (Ethanol, RNAlater, Frozen -20°C/-80°C, Dried, Formalin, Other) and Status (Active, Depleted, Loaned, Vouchered, Destroyed).',
+                  },
+                  {
+                    title: 'Host organism',
+                    description: 'Optionally record the organism this specimen was collected from or associated with (e.g. Quercus robur).',
+                  },
+                  {
+                    title: 'Additional projects',
+                    description: 'Tag the tube to one or more extra projects beyond its primary project — useful when a specimen is shared across multiple collections.',
+                  },
+                  {
+                    title: 'Location notes',
+                    description: 'Add free-text sub-locality detail below the site level (e.g. "200m north of car park"). Corresponds to the MIxS geo_loc_name field.',
+                  },
                   {
                     title: 'Add species associations',
                     description: 'Search the species list or type free text. Record count, life stage, sex, and confidence per association. A tube can have multiple species.',
@@ -227,6 +243,21 @@ export default function HelpPage() {
           ),
         },
         {
+          key: 'species',
+          searchText: 'species list add import bulk CSV upload admin taxonomy genus family order manage species reference create scientific name',
+          node: (
+            <Card style={{ marginBottom: 16 }}>
+              <Title level={5} style={{ marginTop: 0 }}>
+                <ExperimentOutlined style={{ marginRight: 8 }} />
+                Species list & bulk import
+              </Title>
+              <Paragraph style={{ marginBottom: 0 }}>
+                Go to <Text strong>Species</Text> in the sidebar (under Reference) to view and manage the species reference list. Each species entry can store genus, family, and order for taxonomic filtering. Admins can bulk-import species from a CSV file — click <Text strong>Import CSV</Text> on the Species page and upload a file with a <Text code>scientific_name</Text> column (genus, family, and order columns are optional).
+              </Paragraph>
+            </Card>
+          ),
+        },
+        {
           key: 'export',
           searchText: 'export backup restore CSV download specimen data project collector species manage database how to download my data save',
           node: (
@@ -292,12 +323,14 @@ export default function HelpPage() {
       sections: [
         {
           key: 'tips',
-          searchText: 'tips tube code open click search bar species collector storage location notes site dropdown project filtered excel LibreOffice dates bulk import CSV backup update quick shortcuts',
+          searchText: 'tips tube code open click search bar species collector storage location notes site dropdown project filtered excel LibreOffice dates bulk import CSV backup update quick shortcuts status preservation host organism additional projects',
           node: (
             <ul>
               <li>Click any tube code anywhere in the app to open its detail page.</li>
               <li>Use the search bar on the Tubes page to search by code, species, collector, storage location, or notes.</li>
               <li>The site dropdown on the tube form is filtered to show only sites tagged to the selected project (plus untagged sites).</li>
+              <li>Use the Status field to track a tube's lifecycle: Active → Depleted / Loaned / Vouchered / Destroyed.</li>
+              <li>Tag tubes to additional projects when a specimen is relevant to more than one collection — it will appear in exports for all tagged projects.</li>
               <li>
                 Don't open bulk import CSVs in Excel — it corrupts dates and special characters. Use LibreOffice Calc or a plain text editor.
               </li>
