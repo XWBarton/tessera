@@ -40,6 +40,8 @@ export interface SiteProject {
 export interface Site {
   id: number
   name: string
+  country?: string
+  state_province?: string
   description?: string
   habitat_type?: string
   lat?: number
@@ -83,11 +85,13 @@ export interface Specimen {
   collection_location_text?: string
   storage_location?: string
   preservation_method?: string
+  host_organism?: string
   status?: string
   notes?: string
   created_at: string
   updated_at: string
   project?: Project
+  additional_projects?: Project[]
   collector?: User
   entered_by?: User
   sites: Site[]
@@ -120,6 +124,7 @@ export interface SpecimenSpeciesCreate {
 export interface SpecimenCreate {
   specimen_code?: string
   project_id: number
+  additional_project_ids?: number[]
   collection_date?: string
   collection_date_end?: string
   collector_id?: number
@@ -133,6 +138,7 @@ export interface SpecimenCreate {
   collection_location_text?: string
   storage_location?: string
   preservation_method?: string
+  host_organism?: string
   status?: string
   notes?: string
   species_associations: SpecimenSpeciesCreate[]
@@ -141,6 +147,7 @@ export interface SpecimenCreate {
 export interface SpecimenUpdate {
   specimen_code?: string
   project_id?: number
+  additional_project_ids?: number[]
   collection_date?: string
   collection_date_end?: string
   collector_id?: number
@@ -155,6 +162,7 @@ export interface SpecimenUpdate {
   collection_location_text?: string
   storage_location?: string
   preservation_method?: string
+  host_organism?: string
   status?: string
   notes?: string
   species_associations?: SpecimenSpeciesCreate[]

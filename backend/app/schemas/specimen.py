@@ -45,6 +45,7 @@ class SpecimenSpeciesRead(BaseModel):
 
 class SpecimenBase(BaseModel):
     project_id: int
+    additional_project_ids: List[int] = []
     collection_date: Optional[date] = None
     collection_date_end: Optional[date] = None
     collector_id: Optional[int] = None
@@ -59,6 +60,7 @@ class SpecimenBase(BaseModel):
     collection_location_text: Optional[str] = None
     storage_location: Optional[str] = None
     preservation_method: Optional[str] = None
+    host_organism: Optional[str] = None
     status: str = "active"
     notes: Optional[str] = None
 
@@ -71,6 +73,7 @@ class SpecimenCreate(SpecimenBase):
 class SpecimenUpdate(BaseModel):
     specimen_code: Optional[str] = None  # admin only: rename code
     project_id: Optional[int] = None  # admin only: move to different project
+    additional_project_ids: Optional[List[int]] = None
     collection_date: Optional[date] = None
     collection_date_end: Optional[date] = None
     collector_id: Optional[int] = None
@@ -85,6 +88,7 @@ class SpecimenUpdate(BaseModel):
     collection_location_text: Optional[str] = None
     storage_location: Optional[str] = None
     preservation_method: Optional[str] = None
+    host_organism: Optional[str] = None
     status: Optional[str] = None
     notes: Optional[str] = None
     species_associations: Optional[List[SpecimenSpeciesCreate]] = None
@@ -128,6 +132,7 @@ class SpecimenRead(SpecimenBase):
 
 class SpecimenDetail(SpecimenRead):
     project: Optional[ProjectRead] = None
+    additional_projects: List[ProjectRead] = []
     collector: Optional[UserRead] = None
     entered_by: Optional[UserRead] = None
     sites: List[SiteRead] = []

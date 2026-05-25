@@ -695,6 +695,13 @@ export default function SpecimenDetailPage() {
             {specimen.project?.is_protected && <LockOutlined style={{ color: '#faad14', marginRight: 4 }} />}
             {specimen.project?.name}{' '}
             <Tag color="green">{specimen.project?.code}</Tag>
+            {specimen.additional_projects && specimen.additional_projects.length > 0 && (
+              <span style={{ marginLeft: 6 }}>
+                {specimen.additional_projects.map(p => (
+                  <Tag key={p.id} color="blue">{p.code}</Tag>
+                ))}
+              </span>
+            )}
           </Descriptions.Item>
           <Descriptions.Item label="Sample Type">
             {specimen.sample_type ? <Tag>{specimen.sample_type.name}</Tag> : '—'}
@@ -740,7 +747,7 @@ export default function SpecimenDetailPage() {
               </Space>
             ) : '—'}
           </Descriptions.Item>
-          <Descriptions.Item label="Location">
+          <Descriptions.Item label="Location Notes">
             {specimen.collection_location_text || '—'}
           </Descriptions.Item>
           <Descriptions.Item label="Coordinates">
@@ -753,6 +760,9 @@ export default function SpecimenDetailPage() {
           </Descriptions.Item>
           <Descriptions.Item label="Preservation">
             {specimen.preservation_method || '—'}
+          </Descriptions.Item>
+          <Descriptions.Item label="Host Organism">
+            {specimen.host_organism ? <em>{specimen.host_organism}</em> : '—'}
           </Descriptions.Item>
           <Descriptions.Item label="Status">
             {(() => {

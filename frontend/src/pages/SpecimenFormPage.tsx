@@ -72,6 +72,7 @@ export default function SpecimenFormPage() {
       setCollectorMode(mode)
       form.setFieldsValue({
         project_id: specimen.project_id,  // pre-select current project for admin edit
+        additional_project_ids: specimen.additional_projects?.map(p => p.id) ?? [],
         collector_id: specimen.collector_id,
         collector_name: specimen.collector_name,
         collection_date_range_start: specimen.collection_date ? dayjs(specimen.collection_date) : undefined,
@@ -85,6 +86,7 @@ export default function SpecimenFormPage() {
         collection_location_text: specimen.collection_location_text,
         storage_location: specimen.storage_location,
         preservation_method: specimen.preservation_method,
+        host_organism: specimen.host_organism,
         status: specimen.status || 'active',
         notes: specimen.notes,
         species_associations: specimen.species_associations.map((a) => ({
@@ -147,6 +149,7 @@ export default function SpecimenFormPage() {
       if (isEdit) {
         const updatePayload: SpecimenUpdate = {
           project_id: user?.is_admin ? (values.project_id as number | undefined) : undefined,
+          additional_project_ids: (values.additional_project_ids as number[] | undefined) ?? [],
           collection_date: collectionDate,
           collection_date_end: collectionDateEnd,
           collector_id: collectorId,
@@ -160,6 +163,7 @@ export default function SpecimenFormPage() {
           collection_location_text: values.collection_location_text as string | undefined,
           storage_location: values.storage_location as string | undefined,
           preservation_method: values.preservation_method as string | undefined,
+          host_organism: values.host_organism as string | undefined,
           status: values.status as string | undefined,
           notes: values.notes as string | undefined,
           species_associations: speciesAssociations,
@@ -171,6 +175,7 @@ export default function SpecimenFormPage() {
         const createPayload: SpecimenCreate = {
           specimen_code: (values.specimen_code as string | undefined) || undefined,
           project_id: values.project_id as number,
+          additional_project_ids: (values.additional_project_ids as number[] | undefined) ?? [],
           collection_date: collectionDate,
           collection_date_end: collectionDateEnd,
           collector_id: collectorId,
@@ -184,6 +189,7 @@ export default function SpecimenFormPage() {
           collection_location_text: values.collection_location_text as string | undefined,
           storage_location: values.storage_location as string | undefined,
           preservation_method: values.preservation_method as string | undefined,
+          host_organism: values.host_organism as string | undefined,
           status: values.status as string | undefined,
           notes: values.notes as string | undefined,
           species_associations: speciesAssociations,
@@ -240,6 +246,22 @@ export default function SpecimenFormPage() {
               />
             </Form.Item>
           )}
+
+          <Form.Item
+            name="additional_project_ids"
+            label="Also in projects"
+            help="Optionally tag this tube to additional projects for cross-project filtering"
+          >
+            <Select
+              mode="multiple"
+              allowClear
+              placeholder="Select additional projects…"
+              optionFilterProp="label"
+              options={projects
+                ?.filter((p) => p.id !== watchedProjectId)
+                .map((p) => ({ value: p.id, label: `${p.code} — ${p.name}` }))}
+            />
+          </Form.Item>
 
           <Form.Item label="Collector">
             <Radio.Group
@@ -369,8 +391,8 @@ export default function SpecimenFormPage() {
             />
           </Form.Item>
 
-          <Form.Item name="collection_location_text" label="Location Description">
-            <Input placeholder="e.g. Wetland near creek, 200m from road" />
+          <Form.Item name="collection_location_text" label="Location Notes" help="Additional detail below the site-level geo_loc_name (e.g. 200m north of car park)">
+            <Input placeholder="e.g. 200m north of car park, near creek edge" />
           </Form.Item>
           <Form.Item name="collection_lat" hidden><Input /></Form.Item>
           <Form.Item name="collection_lon" hidden><Input /></Form.Item>
@@ -411,6 +433,10 @@ export default function SpecimenFormPage() {
               </Form.Item>
             </Col>
           </Row>
+
+          <Form.Item name="host_organism" label="Host Organism" help="e.g. Quercus robur, Homo sapiens — organism this specimen was collected from or associated with">
+            <Input placeholder="e.g. Quercus robur" />
+          </Form.Item>
 
           <Form.Item name="notes" label="Notes">
             <Input.TextArea rows={3} />

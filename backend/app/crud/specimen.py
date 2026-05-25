@@ -2,7 +2,8 @@ import re
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
-from ..models.specimen import Specimen
+from sqlalchemy import or_
+from ..models.specimen import Specimen, specimen_additional_projects_table
 from ..models.specimen_species import SpecimenSpecies
 from ..models.project import Project
 from ..models.site import Site
@@ -25,6 +26,7 @@ def _build_base_query(
 ):
     query = db.query(Specimen).options(
         joinedload(Specimen.project),
+        joinedload(Specimen.additional_projects),
         joinedload(Specimen.collector),
         joinedload(Specimen.site),
         joinedload(Specimen.sites),
@@ -32,7 +34,12 @@ def _build_base_query(
         joinedload(Specimen.species_associations).joinedload(SpecimenSpecies.species),
     )
     if project_id:
-        query = query.filter(Specimen.project_id == project_id)
+        query = query.filter(
+            or_(
+                Specimen.project_id == project_id,
+                Specimen.additional_projects.any(Project.id == project_id),
+            )
+        ).distinct()
     if collector_id:
         query = query.filter(Specimen.collector_id == collector_id)
     if species_id:
@@ -100,6 +107,7 @@ def get_specimen(db: Session, specimen_id: int) -> Optional[Specimen]:
         db.query(Specimen)
         .options(
             joinedload(Specimen.project),
+            joinedload(Specimen.additional_projects),
             joinedload(Specimen.collector),
             joinedload(Specimen.site),
             joinedload(Specimen.sites),
@@ -151,6 +159,11 @@ def _create_specimen_attempt(
     site_objs = db.query(Site).filter(Site.id.in_(specimen_data.site_ids)).all() if specimen_data.site_ids else []
     first_site_id = site_objs[0].id if site_objs else None
 
+    additional_project_objs = (
+        db.query(Project).filter(Project.id.in_(specimen_data.additional_project_ids)).all()
+        if specimen_data.additional_project_ids else []
+    )
+
     db_specimen = Specimen(
         specimen_code=code,
         project_id=specimen_data.project_id,
@@ -171,6 +184,7 @@ def _create_specimen_attempt(
         storage_location=specimen_data.storage_location,
         notes=specimen_data.notes,
         sites=site_objs,
+        additional_projects=additional_project_objs,
     )
     db.add(db_specimen)
     db.flush()
@@ -208,7 +222,7 @@ def update_specimen(
     db: Session, specimen: Specimen, specimen_update: SpecimenUpdate
 ) -> Specimen:
     update_data = specimen_update.model_dump(
-        exclude_unset=True, exclude={"species_associations", "site_ids"}
+        exclude_unset=True, exclude={"species_associations", "site_ids", "additional_project_ids"}
     )
 
     # When quantity_value changes, preserve how much has been used so the
@@ -228,6 +242,13 @@ def update_specimen(
         site_objs = db.query(Site).filter(Site.id.in_(specimen_update.site_ids)).all()
         specimen.sites = site_objs
         specimen.site_id = site_objs[0].id if site_objs else None
+
+    if specimen_update.additional_project_ids is not None:
+        additional_project_objs = (
+            db.query(Project).filter(Project.id.in_(specimen_update.additional_project_ids)).all()
+            if specimen_update.additional_project_ids else []
+        )
+        specimen.additional_projects = additional_project_objs
 
     if specimen_update.species_associations is not None:
         for assoc in specimen.species_associations:
@@ -262,5 +283,5 @@ def get_specimens_for_export(
     query = _build_base_query(
         db, project_id=project_id, collector_id=collector_id, species_id=species_id
     )
-    query = query.options(joinedload(Specimen.usage_log))
+    query = query.options(joinedload(Specimen.usage_log), joinedload(Specimen.additional_projects))
     return query.all()

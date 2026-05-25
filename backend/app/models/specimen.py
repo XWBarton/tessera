@@ -12,6 +12,14 @@ specimen_sites_table = Table(
     Column("site_id", Integer, ForeignKey("sites.id", ondelete="CASCADE"), primary_key=True),
 )
 
+# Many-to-many junction table for specimen ↔ additional projects
+specimen_additional_projects_table = Table(
+    "specimen_additional_projects",
+    Base.metadata,
+    Column("specimen_id", Integer, ForeignKey("specimens.id", ondelete="CASCADE"), primary_key=True),
+    Column("project_id", Integer, ForeignKey("projects.id", ondelete="CASCADE"), primary_key=True),
+)
+
 
 class Specimen(Base):
     __tablename__ = "specimens"
@@ -38,6 +46,7 @@ class Specimen(Base):
     collection_location_text: Mapped[str] = mapped_column(Text, nullable=True)
     storage_location: Mapped[str] = mapped_column(String(200), nullable=True)
     preservation_method: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    host_organism: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="active", server_default="active")
     notes: Mapped[str] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
@@ -52,6 +61,7 @@ class Specimen(Base):
     entered_by = relationship("User", back_populates="specimens_entered", foreign_keys=[entered_by_id])
     site = relationship("Site", back_populates="specimens", foreign_keys=[site_id])
     sites = relationship("Site", secondary=specimen_sites_table, lazy="select")
+    additional_projects = relationship("Project", secondary=specimen_additional_projects_table, lazy="select")
     sample_type = relationship("SampleType", back_populates="specimens")
     usage_log = relationship("TubeUsageLog", back_populates="specimen", cascade="all, delete-orphan")
     species_associations = relationship(

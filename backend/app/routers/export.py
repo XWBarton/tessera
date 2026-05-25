@@ -30,6 +30,7 @@ def _specimens_to_csv(specimens) -> str:
     base_fields = [
         "specimen_code",
         "project_code",
+        "geo_loc_name",
         "collection_date",
         "collection_date_end",
         "collector",
@@ -40,6 +41,7 @@ def _specimens_to_csv(specimens) -> str:
         "collection_location_text",
         "storage_location",
         "preservation_method",
+        "host_organism",
         "status",
         "notes",
         "usage_count",
@@ -62,9 +64,19 @@ def _specimens_to_csv(specimens) -> str:
     writer.writeheader()
 
     for s in specimens:
+        # Build MIxS geo_loc_name from primary site country:state_province:name
+        site = s.site if hasattr(s, 'site') and s.site else (s.sites[0] if hasattr(s, 'sites') and s.sites else None)
+        geo_parts = [p for p in [
+            getattr(site, 'country', None),
+            getattr(site, 'state_province', None),
+            getattr(site, 'name', None),
+        ] if p]
+        geo_loc_name = ":".join(geo_parts) if geo_parts else ""
+
         row: dict = {
             "specimen_code": s.specimen_code,
             "project_code": s.project.code if s.project else "",
+            "geo_loc_name": geo_loc_name,
             "collection_date": str(s.collection_date) if s.collection_date else "",
             "collection_date_end": str(s.collection_date_end) if s.collection_date_end else "",
             "collector": s.collector.full_name if s.collector else (s.collector_name or "Unknown"),
@@ -75,6 +87,7 @@ def _specimens_to_csv(specimens) -> str:
             "collection_location_text": s.collection_location_text or "",
             "storage_location": s.storage_location or "",
             "preservation_method": s.preservation_method or "",
+            "host_organism": s.host_organism or "",
             "status": s.status or "active",
             "notes": s.notes or "",
             "usage_count": len(s.usage_log),

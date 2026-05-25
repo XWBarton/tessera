@@ -94,7 +94,9 @@ export default function SpeciesPage() {
       title: 'Taxon ID',
       dataIndex: 'taxon_id',
       key: 'taxon_id',
-      render: (v: string) => v || '—',
+      render: (v: string) => v
+        ? <a href={`https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi?id=${encodeURIComponent(v)}`} target="_blank" rel="noreferrer">{v}</a>
+        : '—',
     },
     {
       title: 'Notes',

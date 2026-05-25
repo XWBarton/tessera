@@ -53,6 +53,12 @@ function SiteForm({ onFinish, loading, initialValues }: {
       <Form.Item name="name" label="Site Name" rules={[{ required: true }]}>
         <Input placeholder="e.g. Wetlands Reserve North" />
       </Form.Item>
+      <Form.Item name="country" label="Country" help="MIxS geo_loc_name level 1">
+        <Input placeholder="e.g. Australia" />
+      </Form.Item>
+      <Form.Item name="state_province" label="State / Province" help="MIxS geo_loc_name level 2">
+        <Input placeholder="e.g. Western Australia" />
+      </Form.Item>
       <Form.Item name="project_ids" label="Associated Projects">
         <Select
           mode="multiple"
@@ -279,6 +285,16 @@ export default function SitesPage() {
         r.projects?.length
           ? <Space size={4} wrap>{r.projects.map((p) => <Tag key={p.id} color="blue">{p.code}</Tag>)}</Space>
           : <span style={{ color: '#bbb' }}>—</span>,
+    },
+    {
+      title: 'geo_loc_name',
+      key: 'geo_loc_name',
+      render: (_: unknown, r: Site) => {
+        const parts = [r.country, r.state_province, r.name].filter(Boolean)
+        return parts.length > 1
+          ? <Typography.Text code style={{ fontSize: 12 }}>{parts.join(':')}</Typography.Text>
+          : <span style={{ color: '#bbb' }}>—</span>
+      },
     },
     {
       title: 'Precision',

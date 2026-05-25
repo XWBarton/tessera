@@ -14,6 +14,8 @@ class SiteProjectRef(BaseModel):
 
 class SiteBase(BaseModel):
     name: str
+    country: Optional[str] = None
+    state_province: Optional[str] = None
     description: Optional[str] = None
     habitat_type: Optional[str] = None
     lat: Optional[float] = None
@@ -28,6 +30,8 @@ class SiteCreate(SiteBase):
 
 class SiteUpdate(BaseModel):
     name: Optional[str] = None
+    country: Optional[str] = None
+    state_province: Optional[str] = None
     description: Optional[str] = None
     habitat_type: Optional[str] = None
     lat: Optional[float] = None
