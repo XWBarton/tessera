@@ -40,6 +40,8 @@ def run_migrations():
             ("specimens", "collection_date_end", "DATE", None),
             ("users", "avatar_filename", "TEXT", None),
             ("sites", "precision", "TEXT", None),
+            ("sites", "country", "TEXT", None),
+            ("sites", "state_province", "TEXT", None),
             ("tube_usage_log", "non_destructive", "INTEGER DEFAULT 0", None),
             ("tube_usage_log", "destination_tube", "TEXT", None),
             ("sample_types", "is_specimen", "INTEGER DEFAULT 0",
