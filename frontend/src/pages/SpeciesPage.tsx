@@ -1,11 +1,40 @@
 import { useRef, useState } from 'react'
 import { Typography, Table, Button, Modal, Form, Input, Space, message, Popconfirm, Upload, Alert } from 'antd'
-import { PlusOutlined, DeleteOutlined, UploadOutlined } from '@ant-design/icons'
-import { useSpecies, useCreateSpecies, useDeleteSpecies } from '../hooks/useSpecies'
+import { PlusOutlined, DeleteOutlined, EditOutlined, UploadOutlined } from '@ant-design/icons'
+import { useSpecies, useCreateSpecies, useUpdateSpecies, useDeleteSpecies } from '../hooks/useSpecies'
 import { useAuth } from '../context/AuthContext'
 import { importSpeciesCSV } from '../api/species'
 import { useQueryClient } from '@tanstack/react-query'
 import type { Species } from '../types'
+
+// Shared set of form fields used by both the Add and Edit modals.
+function SpeciesFields() {
+  return (
+    <>
+      <Form.Item name="scientific_name" label="Scientific Name" rules={[{ required: true }]}>
+        <Input placeholder="e.g. Amblyomma triguttatum" />
+      </Form.Item>
+      <Form.Item name="common_name" label="Common Name">
+        <Input placeholder="e.g. Ornate Kangaroo Tick" />
+      </Form.Item>
+      <Form.Item name="genus" label="Genus">
+        <Input placeholder="e.g. Amblyomma" />
+      </Form.Item>
+      <Form.Item name="family" label="Family">
+        <Input placeholder="e.g. Ixodidae" />
+      </Form.Item>
+      <Form.Item name="order_name" label="Order">
+        <Input placeholder="e.g. Ixodida" />
+      </Form.Item>
+      <Form.Item name="taxon_id" label="Taxon ID">
+        <Input placeholder="e.g. NCBI:123456" />
+      </Form.Item>
+      <Form.Item name="notes" label="Notes">
+        <Input.TextArea rows={2} />
+      </Form.Item>
+    </>
+  )
+}
 
 export default function SpeciesPage() {
   const { user } = useAuth()
@@ -14,6 +43,8 @@ export default function SpeciesPage() {
   const deleteSpecies = useDeleteSpecies()
   const queryClient = useQueryClient()
   const [modalOpen, setModalOpen] = useState(false)
+  const [editingSpecies, setEditingSpecies] = useState<Species | null>(null)
+  const updateSpecies = useUpdateSpecies(editingSpecies?.id ?? 0)
   const [importModalOpen, setImportModalOpen] = useState(false)
   const [importLoading, setImportLoading] = useState(false)
   const [importResult, setImportResult] = useState<{ created: number; skipped: number; errors: string[] } | null>(null)
@@ -30,6 +61,17 @@ export default function SpeciesPage() {
     } catch (e: unknown) {
       const err = e as { response?: { data?: { detail?: string } } }
       message.error(err.response?.data?.detail || 'Failed to add species')
+    }
+  }
+
+  const handleEdit = async (values: { scientific_name: string; common_name?: string; notes?: string; genus?: string; family?: string; order_name?: string; taxon_id?: string }) => {
+    try {
+      await updateSpecies.mutateAsync(values)
+      message.success('Species updated')
+      setEditingSpecies(null)
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { detail?: string } } }
+      message.error(err.response?.data?.detail || 'Failed to update species')
     }
   }
 
@@ -108,19 +150,22 @@ export default function SpeciesPage() {
     ...(user?.is_admin ? [{
       title: '',
       key: 'actions',
-      width: 80,
+      width: 100,
       render: (_: unknown, record: Species) => (
-        <Popconfirm
-          title="Delete this species?"
-          onConfirm={() =>
-            deleteSpecies
-              .mutateAsync(record.id)
-              .then(() => message.success('Deleted'))
-              .catch(() => message.error('Failed to delete'))
-          }
-        >
-          <Button icon={<DeleteOutlined />} size="small" danger />
-        </Popconfirm>
+        <Space>
+          <Button icon={<EditOutlined />} size="small" onClick={() => setEditingSpecies(record)} />
+          <Popconfirm
+            title="Delete this species?"
+            onConfirm={() =>
+              deleteSpecies
+                .mutateAsync(record.id)
+                .then(() => message.success('Deleted'))
+                .catch(() => message.error('Failed to delete'))
+            }
+          >
+            <Button icon={<DeleteOutlined />} size="small" danger />
+          </Popconfirm>
+        </Space>
       ),
     }] : []),
   ]
@@ -145,27 +190,7 @@ export default function SpeciesPage() {
       {/* Add single species modal */}
       <Modal title="Add Species" open={modalOpen} onCancel={() => setModalOpen(false)} footer={null}>
         <Form form={form} layout="vertical" onFinish={handleCreate}>
-          <Form.Item name="scientific_name" label="Scientific Name" rules={[{ required: true }]}>
-            <Input placeholder="e.g. Amblyomma triguttatum" />
-          </Form.Item>
-          <Form.Item name="common_name" label="Common Name">
-            <Input placeholder="e.g. Ornate Kangaroo Tick" />
-          </Form.Item>
-          <Form.Item name="genus" label="Genus">
-            <Input placeholder="e.g. Amblyomma" />
-          </Form.Item>
-          <Form.Item name="family" label="Family">
-            <Input placeholder="e.g. Ixodidae" />
-          </Form.Item>
-          <Form.Item name="order_name" label="Order">
-            <Input placeholder="e.g. Ixodida" />
-          </Form.Item>
-          <Form.Item name="taxon_id" label="Taxon ID">
-            <Input placeholder="e.g. NCBI:123456" />
-          </Form.Item>
-          <Form.Item name="notes" label="Notes">
-            <Input.TextArea rows={2} />
-          </Form.Item>
+          <SpeciesFields />
           <Form.Item>
             <Space>
               <Button type="primary" htmlType="submit" loading={createSpecies.isPending}>Add</Button>
@@ -173,6 +198,27 @@ export default function SpeciesPage() {
             </Space>
           </Form.Item>
         </Form>
+      </Modal>
+
+      {/* Edit species modal */}
+      <Modal
+        title={`Edit — ${editingSpecies?.scientific_name ?? ''}`}
+        open={!!editingSpecies}
+        onCancel={() => setEditingSpecies(null)}
+        footer={null}
+        destroyOnClose
+      >
+        {editingSpecies && (
+          <Form key={editingSpecies.id} layout="vertical" onFinish={handleEdit} initialValues={editingSpecies}>
+            <SpeciesFields />
+            <Form.Item>
+              <Space>
+                <Button type="primary" htmlType="submit" loading={updateSpecies.isPending}>Save</Button>
+                <Button onClick={() => setEditingSpecies(null)}>Cancel</Button>
+              </Space>
+            </Form.Item>
+          </Form>
+        )}
       </Modal>
 
       {/* Bulk import modal */}

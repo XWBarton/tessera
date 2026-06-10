@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getSpecies, createSpecies, updateSpecies, deleteSpecies } from '../api/species'
+import type { SpeciesInput } from '../api/species'
 
 export const useSpecies = (q?: string) =>
   useQuery({
@@ -18,11 +19,7 @@ export const useCreateSpecies = () => {
 export const useUpdateSpecies = (id: number) => {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (data: {
-      scientific_name?: string
-      common_name?: string
-      notes?: string
-    }) => updateSpecies(id, data),
+    mutationFn: (data: SpeciesInput) => updateSpecies(id, data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['species'] }),
   })
 }

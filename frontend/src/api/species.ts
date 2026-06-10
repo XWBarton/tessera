@@ -17,9 +17,13 @@ export const createSpecies = async (species: {
   return data
 }
 
+export type SpeciesInput = Partial<
+  Pick<Species, 'scientific_name' | 'common_name' | 'notes' | 'genus' | 'family' | 'order_name' | 'taxon_id'>
+>
+
 export const updateSpecies = async (
   id: number,
-  updates: Partial<Pick<Species, 'scientific_name' | 'common_name' | 'notes'>>
+  updates: SpeciesInput
 ): Promise<Species> => {
   const { data } = await apiClient.put<Species>(`/species/${id}`, updates)
   return data
