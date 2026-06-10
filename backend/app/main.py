@@ -48,6 +48,7 @@ def run_migrations():
              "UPDATE sample_types SET is_specimen = 1 WHERE name IN ('Voucher Specimens', 'Specimen')"),
             ("projects", "is_protected", "INTEGER NOT NULL DEFAULT 0", None),
             ("specimens", "preservation_method", "TEXT", None),
+            ("specimens", "host_organism", "TEXT", None),
             ("specimens", "status", "TEXT NOT NULL DEFAULT 'active'", None),
             ("species", "genus", "TEXT", None),
             ("species", "family", "TEXT", None),
