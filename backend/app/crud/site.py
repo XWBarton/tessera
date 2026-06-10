@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
 from ..models.site import Site
+from ..models.specimen import Specimen
 from ..models.project import Project
 from ..schemas.site import SiteCreate, SiteUpdate
 from typing import Optional, List, TYPE_CHECKING
@@ -80,5 +81,11 @@ def update_site(db: Session, site: Site, updates: SiteUpdate) -> Site:
 
 
 def delete_site(db: Session, site: Site):
+    # Clear the legacy single-site FK on any specimen still pointing here.
+    # That column has no ON DELETE rule, so SQLite would otherwise block the
+    # delete; the many-to-many specimen_sites associations cascade on their own.
+    db.query(Specimen).filter(Specimen.site_id == site.id).update(
+        {Specimen.site_id: None}, synchronize_session=False
+    )
     db.delete(site)
     db.commit()
