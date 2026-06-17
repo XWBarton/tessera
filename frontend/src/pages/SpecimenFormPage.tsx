@@ -19,7 +19,8 @@ import {
   Alert,
 } from 'antd'
 import dayjs from 'dayjs'
-import { useProjects } from '../hooks/useProjects'
+import { useProjects, useNextSpecimenCode } from '../hooks/useProjects'
+import { useSpecies } from '../hooks/useSpecies'
 import { useUsers } from '../hooks/useUsers'
 import { useSites } from '../hooks/useSites'
 import { useSampleTypes } from '../hooks/useSampleTypes'
@@ -40,6 +41,7 @@ export default function SpecimenFormPage() {
   const specimenId = Number(id)
   const [form] = Form.useForm()
   const [collectorMode, setCollectorMode] = useState<CollectorMode>('user')
+  const [hostQuery, setHostQuery] = useState('')
 
   const { data: projects } = useProjects()
   const { data: users } = useUsers()
@@ -56,6 +58,24 @@ export default function SpecimenFormPage() {
   const derivedTotal = watchedAssociations.reduce((sum, a) => sum + (a.specimen_count || 0), 0)
   const watchedSampleTypeId: number | undefined = Form.useWatch('sample_type_id', form)
   const watchedProjectId: number | undefined = Form.useWatch('project_id', form)
+  const watchedCustomCode: string | undefined = Form.useWatch('specimen_code', form)
+
+  // Preview the auto-generated code for the selected (primary) project on new tubes
+  const { data: nextCode } = useNextSpecimenCode(!isEdit ? watchedProjectId : undefined)
+
+  // Host organism is selectable from the species lookup table (plus fixed options)
+  const { data: hostSpecies } = useSpecies(hostQuery || undefined)
+  const HOST_FIXED = ['Questing', 'Unknown']
+  const hostOptions = [
+    ...HOST_FIXED.filter((h) => h.toLowerCase().includes(hostQuery.toLowerCase())).map((h) => ({
+      value: h,
+    })),
+    ...(hostSpecies ?? []).map((s) => ({
+      value: s.scientific_name,
+      label: s.common_name ? `${s.scientific_name} (${s.common_name})` : s.scientific_name,
+    })),
+  ]
+
   const filteredSites = sites?.filter((s) =>
     !s.projects?.length || s.projects.some((p) => p.id === watchedProjectId)
   ) ?? []
@@ -211,17 +231,64 @@ export default function SpecimenFormPage() {
       </Typography.Title>
       <Card>
         <Form form={form} layout="vertical" onFinish={onFinish}>
-          {!isEdit && (
-            <Form.Item name="project_id" label="Project" rules={[{ required: true }]}>
-              <Select
-                placeholder="Select project"
-                options={projects?.map((p) => ({
-                  value: p.id,
-                  label: `${p.code} — ${p.name}`,
-                }))}
-              />
-            </Form.Item>
+          <Row gutter={16}>
+            <Col span={8}>
+              {isEdit && !user?.is_admin ? (
+                <Form.Item label="Project" help="Primary project, sets the tube code">
+                  <Input disabled value={`${specimen?.project?.code} — ${specimen?.project?.name}`} />
+                </Form.Item>
+              ) : (
+                <Form.Item
+                  name="project_id"
+                  label="Project"
+                  help="Primary project, sets the tube code"
+                  rules={[{ required: true, message: 'Select a primary project' }]}
+                >
+                  <Select
+                    placeholder="Select project"
+                    showSearch
+                    optionFilterProp="label"
+                    options={projects?.map((p) => ({
+                      value: p.id,
+                      label: `${p.code} — ${p.name}`,
+                    }))}
+                  />
+                </Form.Item>
+              )}
+            </Col>
+            <Col span={16}>
+              <Form.Item
+                name="additional_project_ids"
+                label="Also in projects"
+                help="Tag this tube to as many additional projects as you like (cross-project filtering)"
+              >
+                <Select
+                  mode="multiple"
+                  allowClear
+                  placeholder="Select additional projects…"
+                  optionFilterProp="label"
+                  options={projects
+                    ?.filter((p) => p.id !== watchedProjectId)
+                    .map((p) => ({ value: p.id, label: `${p.code} — ${p.name}` }))}
+                />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          {!isEdit && watchedProjectId && !watchedCustomCode && nextCode && (
+            <Alert
+              type="info"
+              showIcon
+              style={{ marginBottom: 16 }}
+              message={
+                <span>
+                  This tube will be <strong>{nextCode.next_code}</strong>. Write this on the tube.
+                </span>
+              }
+              description="The preview is for label-writing convenience, not a reservation. If another tube is created for this project first, the actual code may differ by one."
+            />
           )}
+
           {!isEdit && user?.is_admin && (
             <Form.Item
               name="specimen_code"
@@ -231,37 +298,6 @@ export default function SpecimenFormPage() {
               <Input placeholder="e.g. XPG-333" style={{ maxWidth: 200 }} />
             </Form.Item>
           )}
-          {isEdit && !user?.is_admin && (
-            <Form.Item label="Project">
-              <Input disabled value={`${specimen?.project?.code} — ${specimen?.project?.name}`} />
-            </Form.Item>
-          )}
-          {isEdit && user?.is_admin && (
-            <Form.Item name="project_id" label="Project">
-              <Select
-                options={projects?.map((p) => ({
-                  value: p.id,
-                  label: `${p.code} — ${p.name}`,
-                }))}
-              />
-            </Form.Item>
-          )}
-
-          <Form.Item
-            name="additional_project_ids"
-            label="Also in projects"
-            help="Optionally tag this tube to additional projects for cross-project filtering"
-          >
-            <Select
-              mode="multiple"
-              allowClear
-              placeholder="Select additional projects…"
-              optionFilterProp="label"
-              options={projects
-                ?.filter((p) => p.id !== watchedProjectId)
-                .map((p) => ({ value: p.id, label: `${p.code} — ${p.name}` }))}
-            />
-          </Form.Item>
 
           <Form.Item label="Collector">
             <Radio.Group
@@ -434,8 +470,14 @@ export default function SpecimenFormPage() {
             </Col>
           </Row>
 
-          <Form.Item name="host_organism" label="Host Organism" help="e.g. Quercus robur, Homo sapiens — organism this specimen was collected from or associated with">
-            <Input placeholder="e.g. Quercus robur" />
+          <Form.Item name="host_organism" label="Host Organism" help="Select from the species lookup (or 'Questing' / 'Unknown'), or type a free-text host">
+            <AutoComplete
+              options={hostOptions}
+              onSearch={setHostQuery}
+              allowClear
+              placeholder="Search species, or type a host…"
+              filterOption={false}
+            />
           </Form.Item>
 
           <Form.Item name="notes" label="Notes">

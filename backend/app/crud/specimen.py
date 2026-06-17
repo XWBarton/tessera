@@ -119,6 +119,24 @@ def get_specimen(db: Session, specimen_id: int) -> Optional[Specimen]:
     )
 
 
+def get_next_specimen_code(db: Session, project: Project) -> Tuple[int, str]:
+    """Preview the next auto-generated sequence number and code for a project.
+
+    Mirrors the auto-generate branch of _create_specimen_attempt so the UI can
+    show what code a new tube will receive. This is only a preview — the actual
+    code is assigned (with a UNIQUE retry) at creation time.
+    """
+    max_seq = (
+        db.query(func.max(Specimen.sequence_number))
+        .filter(Specimen.project_id == project.id)
+        .filter(Specimen.sequence_number >= 0)
+        .scalar()
+    )
+    seq_number = (max_seq or 0) + 1
+    code = f"{project.code}-{str(seq_number).zfill(3)}"
+    return seq_number, code
+
+
 def _create_specimen_attempt(
     db: Session, specimen_data: SpecimenCreate, project: Project, entered_by_id: int
 ) -> Specimen:

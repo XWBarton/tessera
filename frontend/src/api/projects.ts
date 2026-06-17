@@ -32,6 +32,15 @@ export const deleteProject = async (id: number): Promise<void> => {
   await apiClient.delete(`/projects/${id}`)
 }
 
+export const getNextSpecimenCode = async (
+  id: number
+): Promise<{ next_sequence: number; next_code: string }> => {
+  const { data } = await apiClient.get<{ next_sequence: number; next_code: string }>(
+    `/projects/${id}/next-code`
+  )
+  return data
+}
+
 export const getProjectSpecimens = async (
   id: number,
   skip = 0,

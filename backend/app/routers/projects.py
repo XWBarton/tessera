@@ -9,7 +9,7 @@ from ..crud.project import (
     delete_project,
     get_project_by_code,
 )
-from ..crud.specimen import get_specimens
+from ..crud.specimen import get_specimens, get_next_specimen_code
 from ..schemas.project import ProjectRead, ProjectCreate, ProjectUpdate, ProjectAccessUserRead
 from ..schemas.specimen import SpecimenList
 from ..models.user import User
@@ -75,6 +75,19 @@ def delete_existing_project(
         raise HTTPException(status_code=404, detail="Project not found")
     delete_project(db, project)
     return {"message": "Project deleted"}
+
+
+@router.get("/{project_id}/next-code")
+def preview_next_specimen_code(
+    project_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    project = get_project(db, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    seq_number, code = get_next_specimen_code(db, project)
+    return {"next_sequence": seq_number, "next_code": code}
 
 
 @router.get("/{project_id}/specimens", response_model=SpecimenList)
