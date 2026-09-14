@@ -33,6 +33,20 @@ def _serialize(value):
     return value
 
 
+@router.get("/schema", response_model=dict[str, list[str]])
+def get_schema(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    tables = db.execute(
+        text("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
+    ).scalars().all()
+    return {
+        table: [row[1] for row in db.execute(text(f'PRAGMA table_info("{table}")')).fetchall()]
+        for table in tables
+    }
+
+
 @router.post("/execute", response_model=SQLResult)
 def execute_sql(
     payload: SQLQuery,

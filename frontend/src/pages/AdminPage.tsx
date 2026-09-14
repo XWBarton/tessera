@@ -1,4 +1,6 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
+import CodeMirror from '@uiw/react-codemirror'
+import { sql, SQLite } from '@codemirror/lang-sql'
 import {
   Typography,
   Tabs,
@@ -805,6 +807,20 @@ function SqlConsoleTab() {
     runQuery(pendingQuery)
   }
 
+  const { data: schema } = useQuery({
+    queryKey: ['sql-console-schema'],
+    queryFn: async () => {
+      const { data } = await apiClient.get<Record<string, string[]>>('/admin/sql/schema')
+      return data
+    },
+    staleTime: 5 * 60 * 1000,
+  })
+
+  const sqlExtension = useMemo(
+    () => sql({ dialect: SQLite, schema: schema ?? {}, upperCaseKeywords: true }),
+    [schema]
+  )
+
   const tableData =
     result?.columns.length
       ? result.rows.map((row, i) => {
@@ -822,13 +838,16 @@ function SqlConsoleTab() {
         message="Runs raw SQL directly against the database. There is no undo."
         style={{ marginBottom: 16 }}
       />
-      <Input.TextArea
-        rows={8}
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        placeholder="SELECT * FROM specimens LIMIT 10"
-        style={{ fontFamily: 'monospace', marginBottom: 12 }}
-      />
+      <div style={{ border: '1px solid #d9d9d9', borderRadius: 6, marginBottom: 12, overflow: 'hidden' }}>
+        <CodeMirror
+          value={query}
+          height="200px"
+          extensions={[sqlExtension]}
+          onChange={setQuery}
+          placeholder="SELECT * FROM specimens LIMIT 10"
+          basicSetup={{ foldGutter: false }}
+        />
+      </div>
       <Space style={{ marginBottom: 16 }}>
         <Button type="primary" onClick={handleExecute} loading={running} disabled={!query.trim()}>
           Run
