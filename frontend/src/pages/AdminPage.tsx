@@ -18,7 +18,7 @@ import {
   Drawer,
   Select,
 } from 'antd'
-import { PlusOutlined, DeleteOutlined, CheckCircleOutlined, CloseCircleOutlined, LinkOutlined, LockOutlined } from '@ant-design/icons'
+import { PlusOutlined, DeleteOutlined, CheckCircleOutlined, CloseCircleOutlined, LinkOutlined, LockOutlined, WarningOutlined } from '@ant-design/icons'
 import { useUsers, useCreateUser, useUpdateUser } from '../hooks/useUsers'
 import { useSampleTypes, useCreateSampleType, useUpdateSampleType, useDeleteSampleType } from '../hooks/useSampleTypes'
 import { useProjects } from '../hooks/useProjects'
@@ -750,6 +750,166 @@ function ProjectsTab() {
   )
 }
 
+interface SqlResult {
+  columns: string[]
+  rows: unknown[][]
+  row_count: number
+  truncated: boolean
+}
+
+const DESTRUCTIVE_SQL = /\b(insert|update|delete|drop|alter|create|replace|truncate|pragma)\b/i
+
+const CONFIRM_PHRASE = 'I UNDERSTAND'
+
+function SqlConsoleTab() {
+  const [query, setQuery] = useState('')
+  const [result, setResult] = useState<SqlResult | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [running, setRunning] = useState(false)
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const [confirmText, setConfirmText] = useState('')
+  const [pendingQuery, setPendingQuery] = useState('')
+
+  const runQuery = async (q: string) => {
+    setRunning(true)
+    setError(null)
+    try {
+      const { data } = await apiClient.post<SqlResult>('/admin/sql/execute', { query: q })
+      setResult(data)
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { detail?: string } } }
+      setError(err.response?.data?.detail || 'Query failed')
+      setResult(null)
+    } finally {
+      setRunning(false)
+    }
+  }
+
+  const handleExecute = () => {
+    const trimmed = query.trim()
+    if (!trimmed) return
+    if (DESTRUCTIVE_SQL.test(trimmed)) {
+      setPendingQuery(trimmed)
+      setConfirmText('')
+      setConfirmOpen(true)
+    } else {
+      runQuery(trimmed)
+    }
+  }
+
+  const confirmMatches = confirmText.trim().toUpperCase() === CONFIRM_PHRASE
+
+  const handleConfirmedRun = () => {
+    if (!confirmMatches) return
+    setConfirmOpen(false)
+    runQuery(pendingQuery)
+  }
+
+  const tableData =
+    result?.columns.length
+      ? result.rows.map((row, i) => {
+          const record: Record<string, unknown> = { key: i }
+          result.columns.forEach((col, j) => { record[col] = row[j] })
+          return record
+        })
+      : []
+
+  return (
+    <div>
+      <Alert
+        type="warning"
+        showIcon
+        message="Runs raw SQL directly against the database. There is no undo."
+        style={{ marginBottom: 16 }}
+      />
+      <Input.TextArea
+        rows={8}
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="SELECT * FROM specimens LIMIT 10"
+        style={{ fontFamily: 'monospace', marginBottom: 12 }}
+      />
+      <Space style={{ marginBottom: 16 }}>
+        <Button type="primary" onClick={handleExecute} loading={running} disabled={!query.trim()}>
+          Run
+        </Button>
+        <Button onClick={() => { setQuery(''); setResult(null); setError(null) }}>
+          Clear
+        </Button>
+      </Space>
+      {error && (
+        <Alert type="error" showIcon message="Query failed" description={error} style={{ marginBottom: 16 }} />
+      )}
+      {result && !result.columns.length && !error && (
+        <Alert type="success" showIcon message={`OK — ${result.row_count} row(s) affected`} style={{ marginBottom: 16 }} />
+      )}
+      {result && result.columns.length > 0 && (
+        <>
+          {result.truncated && (
+            <Alert type="info" showIcon message={`Showing first ${result.rows.length} rows`} style={{ marginBottom: 12 }} />
+          )}
+          <Table
+            size="small"
+            dataSource={tableData}
+            pagination={{ pageSize: 25 }}
+            scroll={{ x: true }}
+            columns={result.columns.map((col) => ({
+              title: col,
+              dataIndex: col,
+              key: col,
+              render: (v: unknown) => (v === null ? <Tag>NULL</Tag> : String(v)),
+            }))}
+          />
+        </>
+      )}
+      <Modal
+        title={
+          <Space>
+            <WarningOutlined style={{ color: '#ff4d4f' }} />
+            This will modify the database
+          </Space>
+        }
+        open={confirmOpen}
+        onCancel={() => setConfirmOpen(false)}
+        maskClosable={false}
+        footer={[
+          <Button key="cancel" onClick={() => setConfirmOpen(false)}>
+            Cancel
+          </Button>,
+          <Button key="run" danger type="primary" disabled={!confirmMatches} onClick={handleConfirmedRun}>
+            Run this query
+          </Button>,
+        ]}
+      >
+        <Alert
+          type="error"
+          showIcon
+          message="This statement can insert, update, delete, or alter data and schema."
+          description="There is no backup and no undo. If it's wrong, it stays wrong."
+          style={{ marginBottom: 16 }}
+        />
+        <Typography.Paragraph
+          code
+          style={{ maxHeight: 120, overflow: 'auto', whiteSpace: 'pre-wrap', marginBottom: 16 }}
+        >
+          {pendingQuery}
+        </Typography.Paragraph>
+        <Typography.Text>
+          Type <Typography.Text code>{CONFIRM_PHRASE}</Typography.Text> to confirm:
+        </Typography.Text>
+        <Input
+          value={confirmText}
+          onChange={(e) => setConfirmText(e.target.value)}
+          placeholder={CONFIRM_PHRASE}
+          style={{ marginTop: 8 }}
+          autoFocus
+          onPressEnter={handleConfirmedRun}
+        />
+      </Modal>
+    </div>
+  )
+}
+
 function AboutTab() {
   return (
     <div style={{ maxWidth: 540, paddingTop: 8 }}>
@@ -782,6 +942,7 @@ export default function AdminPage() {
           { key: 'options', label: 'Dropdown Options', children: <OptionsTab /> },
           { key: 'integrations', label: 'Integrations', children: <IntegrationsTab /> },
           { key: 'projects', label: 'Projects', children: <ProjectsTab /> },
+          { key: 'sql', label: 'SQL Console', children: <SqlConsoleTab /> },
           { key: 'about', label: 'About', children: <AboutTab /> },
         ]}
       />

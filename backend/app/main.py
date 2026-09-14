@@ -7,8 +7,11 @@ from slowapi.errors import RateLimitExceeded
 from sqlalchemy import text
 from .config import settings
 from .database import engine, SessionLocal, Base
-from .models import User, Project, Species, Site, SampleType, Specimen, SpecimenSpecies, TubeUsageLog, LookupOption
-from .routers import auth, users, projects, species, sites, sample_types, specimens, export, lookups, setup, app_settings
+from .models import (
+    User, Project, Species, Site, SampleType, Specimen, SpecimenSpecies,
+    TubeUsageLog, LookupOption, SpecimenCodeReservation,
+)
+from .routers import auth, users, projects, species, sites, sample_types, specimens, export, lookups, setup, app_settings, sql_console
 from .crud.user import get_user_by_username, create_user
 from .crud.sample_type import seed_sample_types
 from .crud.lookup_option import seed_lookup_options
@@ -248,6 +251,7 @@ app.include_router(specimens.router)
 app.include_router(export.router)
 app.include_router(lookups.router)
 app.include_router(app_settings.router)
+app.include_router(sql_console.router)
 
 
 @app.on_event("startup")
