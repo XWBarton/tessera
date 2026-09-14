@@ -115,68 +115,34 @@ def export_specimens(
     project_id: Optional[int] = None,
     collector_id: Optional[int] = None,
     species_id: Optional[int] = None,
+    site_id: Optional[int] = None,
+    confidence: Optional[str] = None,
+    life_stage: Optional[str] = None,
+    sex: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    search: Optional[str] = None,
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
     specimens = get_specimens_for_export(
-        db, project_id=project_id, collector_id=collector_id, species_id=species_id
+        db,
+        project_id=project_id,
+        collector_id=collector_id,
+        species_id=species_id,
+        site_id=site_id,
+        confidence=confidence,
+        life_stage=life_stage,
+        sex=sex,
+        date_from=date_from,
+        date_to=date_to,
+        search=search,
     )
     content = _specimens_to_csv(specimens)
     return StreamingResponse(
         io.BytesIO(content.encode()),
         media_type="text/csv",
         headers={"Content-Disposition": 'attachment; filename="specimens_export.csv"'},
-    )
-
-
-@router.get("/specimens/project/{project_id}")
-def export_by_project(
-    project_id: int,
-    db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
-):
-    specimens = get_specimens_for_export(db, project_id=project_id)
-    content = _specimens_to_csv(specimens)
-    return StreamingResponse(
-        io.BytesIO(content.encode()),
-        media_type="text/csv",
-        headers={
-            "Content-Disposition": f'attachment; filename="project_{project_id}_specimens.csv"'
-        },
-    )
-
-
-@router.get("/specimens/collector/{collector_id}")
-def export_by_collector(
-    collector_id: int,
-    db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
-):
-    specimens = get_specimens_for_export(db, collector_id=collector_id)
-    content = _specimens_to_csv(specimens)
-    return StreamingResponse(
-        io.BytesIO(content.encode()),
-        media_type="text/csv",
-        headers={
-            "Content-Disposition": f'attachment; filename="collector_{collector_id}_specimens.csv"'
-        },
-    )
-
-
-@router.get("/specimens/species/{species_id}")
-def export_by_species(
-    species_id: int,
-    db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
-):
-    specimens = get_specimens_for_export(db, species_id=species_id)
-    content = _specimens_to_csv(specimens)
-    return StreamingResponse(
-        io.BytesIO(content.encode()),
-        media_type="text/csv",
-        headers={
-            "Content-Disposition": f'attachment; filename="species_{species_id}_specimens.csv"'
-        },
     )
 
 

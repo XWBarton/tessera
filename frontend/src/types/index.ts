@@ -123,6 +123,7 @@ export interface SpecimenSpeciesCreate {
 
 export interface SpecimenCreate {
   specimen_code?: string
+  reservation_id?: number
   project_id: number
   additional_project_ids?: number[]
   collection_date?: string

@@ -32,13 +32,23 @@ export const deleteProject = async (id: number): Promise<void> => {
   await apiClient.delete(`/projects/${id}`)
 }
 
-export const getNextSpecimenCode = async (
-  id: number
-): Promise<{ next_sequence: number; next_code: string }> => {
-  const { data } = await apiClient.get<{ next_sequence: number; next_code: string }>(
-    `/projects/${id}/next-code`
-  )
+export interface CodeReservation {
+  reservation_id: number
+  next_sequence: number
+  next_code: string
+  expires_at: string
+}
+
+export const reserveSpecimenCode = async (projectId: number): Promise<CodeReservation> => {
+  const { data } = await apiClient.post<CodeReservation>(`/projects/${projectId}/reserve-code`)
   return data
+}
+
+export const releaseSpecimenCode = async (
+  projectId: number,
+  reservationId: number
+): Promise<void> => {
+  await apiClient.delete(`/projects/${projectId}/reserve-code/${reservationId}`)
 }
 
 export const getProjectSpecimens = async (

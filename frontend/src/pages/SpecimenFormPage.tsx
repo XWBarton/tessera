@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   Form,
@@ -19,7 +19,8 @@ import {
   Alert,
 } from 'antd'
 import dayjs from 'dayjs'
-import { useProjects, useNextSpecimenCode } from '../hooks/useProjects'
+import { useProjects, useReserveSpecimenCode, useReleaseSpecimenCode } from '../hooks/useProjects'
+import type { CodeReservation } from '../api/projects'
 import { useSpecies } from '../hooks/useSpecies'
 import { useUsers } from '../hooks/useUsers'
 import { useSites } from '../hooks/useSites'
@@ -60,8 +61,43 @@ export default function SpecimenFormPage() {
   const watchedProjectId: number | undefined = Form.useWatch('project_id', form)
   const watchedCustomCode: string | undefined = Form.useWatch('specimen_code', form)
 
-  // Preview the auto-generated code for the selected (primary) project on new tubes
-  const { data: nextCode } = useNextSpecimenCode(!isEdit ? watchedProjectId : undefined)
+  // Reserve the auto-generated code for the selected (primary) project on new tubes.
+  // This actually holds the sequence number server-side (not just a preview) so two
+  // people filling out the form for the same project can't be shown the same code.
+  const reserveCode = useReserveSpecimenCode()
+  const releaseCode = useReleaseSpecimenCode()
+  const [reservation, setReservation] = useState<CodeReservation | null>(null)
+  const activeReservationRef = useRef<{ projectId: number; reservationId: number } | null>(null)
+  const hasCustomCode = !!watchedCustomCode
+
+  useEffect(() => {
+    if (isEdit || !watchedProjectId || hasCustomCode) {
+      setReservation(null)
+      return
+    }
+    let cancelled = false
+    reserveCode.mutate(watchedProjectId, {
+      onSuccess: (data) => {
+        if (cancelled) {
+          // Effect already cleaned up before the request resolved — don't leak the hold.
+          releaseCode.mutate({ projectId: watchedProjectId, reservationId: data.reservation_id })
+          return
+        }
+        activeReservationRef.current = { projectId: watchedProjectId, reservationId: data.reservation_id }
+        setReservation(data)
+      },
+    })
+    return () => {
+      cancelled = true
+      const held = activeReservationRef.current
+      if (held) {
+        releaseCode.mutate({ projectId: held.projectId, reservationId: held.reservationId })
+        activeReservationRef.current = null
+      }
+      setReservation(null)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEdit, watchedProjectId, hasCustomCode])
 
   // Host organism is selectable from the species lookup table (plus fixed options)
   const { data: hostSpecies } = useSpecies(hostQuery || undefined)
@@ -194,6 +230,7 @@ export default function SpecimenFormPage() {
       } else {
         const createPayload: SpecimenCreate = {
           specimen_code: (values.specimen_code as string | undefined) || undefined,
+          reservation_id: reservation?.reservation_id,
           project_id: values.project_id as number,
           additional_project_ids: (values.additional_project_ids as number[] | undefined) ?? [],
           collection_date: collectionDate,
@@ -215,6 +252,9 @@ export default function SpecimenFormPage() {
           species_associations: speciesAssociations,
         }
         const created = await createSpecimen.mutateAsync(createPayload)
+        // Reservation was consumed server-side — clear the ref so the unmount
+        // cleanup doesn't fire a redundant release call for an already-gone row.
+        activeReservationRef.current = null
         message.success(`Tube ${created.specimen_code} created`)
         navigate(`/specimens/${created.id}`)
       }
@@ -275,17 +315,17 @@ export default function SpecimenFormPage() {
             </Col>
           </Row>
 
-          {!isEdit && watchedProjectId && !watchedCustomCode && nextCode && (
+          {!isEdit && watchedProjectId && !watchedCustomCode && reservation && (
             <Alert
-              type="info"
+              type="success"
               showIcon
               style={{ marginBottom: 16 }}
               message={
                 <span>
-                  This tube will be <strong>{nextCode.next_code}</strong>. Write this on the tube.
+                  This tube will be <strong>{reservation.next_code}</strong>. Write this on the tube.
                 </span>
               }
-              description="The preview is for label-writing convenience, not a reservation. If another tube is created for this project first, the actual code may differ by one."
+              description="This code is reserved for you — nobody else will be assigned it while this form is open. The hold is released automatically if you navigate away without saving."
             />
           )}
 

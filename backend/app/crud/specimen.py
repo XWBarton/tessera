@@ -5,11 +5,14 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy import or_
 from ..models.specimen import Specimen, specimen_additional_projects_table
 from ..models.specimen_species import SpecimenSpecies
+from ..models.specimen_code_reservation import SpecimenCodeReservation
 from ..models.project import Project
 from ..models.site import Site
 from ..schemas.specimen import SpecimenCreate, SpecimenUpdate
 from typing import Optional, List, Tuple
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
+
+RESERVATION_TTL_MINUTES = 20
 
 
 def _build_base_query(
@@ -17,6 +20,7 @@ def _build_base_query(
     project_id=None,
     collector_id=None,
     species_id=None,
+    site_id=None,
     confidence=None,
     life_stage=None,
     sex=None,
@@ -42,6 +46,13 @@ def _build_base_query(
         ).distinct()
     if collector_id:
         query = query.filter(Specimen.collector_id == collector_id)
+    if site_id:
+        query = query.filter(
+            or_(
+                Specimen.site_id == site_id,
+                Specimen.sites.any(Site.id == site_id),
+            )
+        ).distinct()
     if species_id:
         query = query.join(Specimen.species_associations).filter(
             SpecimenSpecies.species_id == species_id
@@ -119,26 +130,74 @@ def get_specimen(db: Session, specimen_id: int) -> Optional[Specimen]:
     )
 
 
-def get_next_specimen_code(db: Session, project: Project) -> Tuple[int, str]:
-    """Preview the next auto-generated sequence number and code for a project.
+def _purge_expired_reservations(db: Session, project_id: int) -> None:
+    db.query(SpecimenCodeReservation).filter(
+        SpecimenCodeReservation.project_id == project_id,
+        SpecimenCodeReservation.expires_at < datetime.now(timezone.utc),
+    ).delete(synchronize_session=False)
+    db.commit()
 
-    Mirrors the auto-generate branch of _create_specimen_attempt so the UI can
-    show what code a new tube will receive. This is only a preview — the actual
-    code is assigned (with a UNIQUE retry) at creation time.
-    """
-    max_seq = (
+
+def _reserve_next_code_attempt(
+    db: Session, project: Project, user_id: int
+) -> SpecimenCodeReservation:
+    _purge_expired_reservations(db, project.id)
+    max_specimen_seq = (
         db.query(func.max(Specimen.sequence_number))
         .filter(Specimen.project_id == project.id)
         .filter(Specimen.sequence_number >= 0)
         .scalar()
-    )
-    seq_number = (max_seq or 0) + 1
+    ) or 0
+    max_reserved_seq = (
+        db.query(func.max(SpecimenCodeReservation.sequence_number))
+        .filter(SpecimenCodeReservation.project_id == project.id)
+        .scalar()
+    ) or 0
+    seq_number = max(max_specimen_seq, max_reserved_seq) + 1
     code = f"{project.code}-{str(seq_number).zfill(3)}"
-    return seq_number, code
+    reservation = SpecimenCodeReservation(
+        project_id=project.id,
+        sequence_number=seq_number,
+        code=code,
+        reserved_by_id=user_id,
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=RESERVATION_TTL_MINUTES),
+    )
+    db.add(reservation)
+    db.commit()
+    db.refresh(reservation)
+    return reservation
+
+
+def reserve_next_code(db: Session, project: Project, user_id: int) -> SpecimenCodeReservation:
+    """Atomically claim the next auto-generated code for a project.
+
+    Unlike a plain preview, this actually holds the sequence number (via a
+    reservation row sharing the same project+sequence uniqueness as real
+    tubes) so nobody else is offered the same code. Expires after
+    RESERVATION_TTL_MINUTES if never consumed by create_specimen().
+    """
+    try:
+        return _reserve_next_code_attempt(db, project, user_id)
+    except IntegrityError:
+        db.rollback()
+        return _reserve_next_code_attempt(db, project, user_id)
+
+
+def release_reservation(db: Session, reservation_id: int, project_id: int) -> None:
+    db.query(SpecimenCodeReservation).filter(
+        SpecimenCodeReservation.id == reservation_id,
+        SpecimenCodeReservation.project_id == project_id,
+    ).delete(synchronize_session=False)
+    db.commit()
 
 
 def _create_specimen_attempt(
-    db: Session, specimen_data: SpecimenCreate, project: Project, entered_by_id: int
+    db: Session,
+    specimen_data: SpecimenCreate,
+    project: Project,
+    entered_by_id: int,
+    reserved_sequence: Optional[int] = None,
+    reserved_code: Optional[str] = None,
 ) -> Specimen:
     if specimen_data.specimen_code:
         code = specimen_data.specimen_code
@@ -157,16 +216,30 @@ def _create_specimen_attempt(
                 .scalar()
             ) or 0
             seq_number = min_seq - 1
+    elif reserved_sequence is not None and reserved_code is not None:
+        # Consuming a held reservation — use its exact sequence/code rather
+        # than recomputing MAX+1 (which is what the reservation exists to avoid).
+        seq_number = reserved_sequence
+        code = reserved_code
     else:
         # Auto-generate: only consider non-negative sequence numbers so custom
-        # non-matching codes (stored as negatives) don't skew the counter.
+        # non-matching codes (stored as negatives) don't skew the counter. Also
+        # skip numbers currently on hold via an active reservation, so a create
+        # that bypasses the reserve step (bulk import, stale client) can't steal
+        # a number someone else's form has already reserved.
         max_seq = (
             db.query(func.max(Specimen.sequence_number))
             .filter(Specimen.project_id == project.id)
             .filter(Specimen.sequence_number >= 0)
             .scalar()
-        )
-        seq_number = (max_seq or 0) + 1
+        ) or 0
+        max_reserved_seq = (
+            db.query(func.max(SpecimenCodeReservation.sequence_number))
+            .filter(SpecimenCodeReservation.project_id == project.id)
+            .filter(SpecimenCodeReservation.expires_at >= datetime.now(timezone.utc))
+            .scalar()
+        ) or 0
+        seq_number = max(max_seq, max_reserved_seq) + 1
         code = f"{project.code}-{str(seq_number).zfill(3)}"
 
     # Initialise quantity_remaining = quantity_value when first set
@@ -225,15 +298,46 @@ def _create_specimen_attempt(
 
 
 def create_specimen(
-    db: Session, specimen_data: SpecimenCreate, project: Project, entered_by_id: int
+    db: Session,
+    specimen_data: SpecimenCreate,
+    project: Project,
+    entered_by_id: int,
+    reservation_id: Optional[int] = None,
 ) -> Specimen:
+    reservation = None
+    reserved_sequence = reserved_code = None
+    if reservation_id and not specimen_data.specimen_code:
+        reservation = (
+            db.query(SpecimenCodeReservation)
+            .filter(
+                SpecimenCodeReservation.id == reservation_id,
+                SpecimenCodeReservation.project_id == project.id,
+                SpecimenCodeReservation.expires_at >= datetime.now(timezone.utc),
+            )
+            .first()
+        )
+        if reservation:
+            reserved_sequence, reserved_code = reservation.sequence_number, reservation.code
+
     try:
-        return _create_specimen_attempt(db, specimen_data, project, entered_by_id)
+        specimen = _create_specimen_attempt(
+            db, specimen_data, project, entered_by_id,
+            reserved_sequence=reserved_sequence, reserved_code=reserved_code,
+        )
     except IntegrityError:
         db.rollback()
         if specimen_data.specimen_code:
             raise  # custom code is a duplicate — let the router surface the error
-        return _create_specimen_attempt(db, specimen_data, project, entered_by_id)
+        # Reservation may have gone stale between lookup and insert — fall back
+        # to a fresh auto-generated number rather than failing the request.
+        specimen = _create_specimen_attempt(db, specimen_data, project, entered_by_id)
+        reservation = None
+
+    if reservation:
+        db.delete(reservation)
+        db.commit()
+
+    return specimen
 
 
 def update_specimen(
@@ -295,11 +399,30 @@ def delete_specimen(db: Session, specimen: Specimen):
 
 
 def get_specimens_for_export(
-    db: Session, project_id=None, collector_id=None, species_id=None
+    db: Session,
+    project_id=None,
+    collector_id=None,
+    species_id=None,
+    site_id=None,
+    confidence=None,
+    life_stage=None,
+    sex=None,
+    date_from=None,
+    date_to=None,
+    search=None,
 ) -> List[Specimen]:
-    from ..models.tube_usage_log import TubeUsageLog
     query = _build_base_query(
-        db, project_id=project_id, collector_id=collector_id, species_id=species_id
+        db,
+        project_id=project_id,
+        collector_id=collector_id,
+        species_id=species_id,
+        site_id=site_id,
+        confidence=confidence,
+        life_stage=life_stage,
+        sex=sex,
+        date_from=date_from,
+        date_to=date_to,
+        search=search,
     )
     query = query.options(joinedload(Specimen.usage_log), joinedload(Specimen.additional_projects))
     return query.all()

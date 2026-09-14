@@ -2,7 +2,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   getProjects,
   getProject,
-  getNextSpecimenCode,
+  reserveSpecimenCode,
+  releaseSpecimenCode,
   createProject,
   updateProject,
   deleteProject,
@@ -11,11 +12,13 @@ import {
 export const useProjects = () =>
   useQuery({ queryKey: ['projects'], queryFn: getProjects })
 
-export const useNextSpecimenCode = (projectId?: number) =>
-  useQuery({
-    queryKey: ['project', projectId, 'next-code'],
-    queryFn: () => getNextSpecimenCode(projectId as number),
-    enabled: !!projectId,
+export const useReserveSpecimenCode = () =>
+  useMutation({ mutationFn: (projectId: number) => reserveSpecimenCode(projectId) })
+
+export const useReleaseSpecimenCode = () =>
+  useMutation({
+    mutationFn: ({ projectId, reservationId }: { projectId: number; reservationId: number }) =>
+      releaseSpecimenCode(projectId, reservationId),
   })
 
 export const useProject = (id: number) =>

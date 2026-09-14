@@ -67,6 +67,7 @@ class SpecimenBase(BaseModel):
 
 class SpecimenCreate(SpecimenBase):
     specimen_code: Optional[str] = None  # admin only: custom code override
+    reservation_id: Optional[int] = None  # consume a previously held code reservation
     species_associations: List[SpecimenSpeciesCreate] = []
 
 

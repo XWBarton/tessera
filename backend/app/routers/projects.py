@@ -9,7 +9,7 @@ from ..crud.project import (
     delete_project,
     get_project_by_code,
 )
-from ..crud.specimen import get_specimens, get_next_specimen_code
+from ..crud.specimen import get_specimens, reserve_next_code, release_reservation
 from ..schemas.project import ProjectRead, ProjectCreate, ProjectUpdate, ProjectAccessUserRead
 from ..schemas.specimen import SpecimenList
 from ..models.user import User
@@ -77,17 +77,33 @@ def delete_existing_project(
     return {"message": "Project deleted"}
 
 
-@router.get("/{project_id}/next-code")
-def preview_next_specimen_code(
+@router.post("/{project_id}/reserve-code")
+def reserve_specimen_code(
     project_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     project = get_project(db, project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-    seq_number, code = get_next_specimen_code(db, project)
-    return {"next_sequence": seq_number, "next_code": code}
+    reservation = reserve_next_code(db, project, current_user.id)
+    return {
+        "reservation_id": reservation.id,
+        "next_sequence": reservation.sequence_number,
+        "next_code": reservation.code,
+        "expires_at": reservation.expires_at,
+    }
+
+
+@router.delete("/{project_id}/reserve-code/{reservation_id}")
+def release_specimen_code(
+    project_id: int,
+    reservation_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    release_reservation(db, reservation_id, project_id)
+    return {"message": "Reservation released"}
 
 
 @router.get("/{project_id}/specimens", response_model=SpecimenList)

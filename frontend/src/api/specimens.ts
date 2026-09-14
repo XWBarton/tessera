@@ -3,11 +3,14 @@ import type { Specimen, SpecimenList, SpecimenCreate, SpecimenUpdate, SpecimenFi
 
 export interface SpecimenStats {
   total: number
+  total_individuals: number
   this_month: number
   by_project: { name: string; value: number }[]
+  by_site: { name: string; value: number }[]
   by_collector: { name: string; value: number }[]
   by_month: { name: string; value: number }[]
   by_species: { name: string; value: number }[]
+  by_family: { name: string; value: number }[]
   by_sample_type: { name: string; value: number }[]
   by_storage: { name: string; value: number }[]
   recent: Specimen[]

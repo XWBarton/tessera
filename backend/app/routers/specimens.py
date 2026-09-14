@@ -271,7 +271,10 @@ def create_new_specimen(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
     try:
-        return create_specimen(db, specimen, project, entered_by_id=current_user.id)
+        return create_specimen(
+            db, specimen, project, entered_by_id=current_user.id,
+            reservation_id=specimen.reservation_id,
+        )
     except IntegrityError:
         raise HTTPException(status_code=400, detail=f"Tube code '{specimen.specimen_code}' already exists")
 
@@ -296,10 +299,16 @@ def get_specimen_stats(
     from ..models.sample_type import SampleType as SampleTypeModel
     from ..models.user import User as UserModel
     from ..models.project import Project as ProjectModel
+    from ..models.site import Site as SiteModel
     from datetime import date
 
     # Total count
     total = db.query(sql_func.count(SpecimenModel.id)).scalar()
+
+    # Total individual specimens (sum of per-species counts within tubes)
+    total_individuals = db.query(
+        sql_func.coalesce(sql_func.sum(sql_func.coalesce(SpecimenSpeciesModel.specimen_count, 0)), 0)
+    ).scalar()
 
     # This month count (by collection_date)
     today = date.today()
@@ -317,6 +326,20 @@ def get_specimen_stats(
         .all()
     )
     by_project = [{"name": r[0], "value": r[1]} for r in by_project_rows]
+
+    # By site/location (primary collection site)
+    by_site_rows = (
+        db.query(
+            sql_func.coalesce(SiteModel.name, "No location"),
+            sql_func.count(SpecimenModel.id)
+        )
+        .outerjoin(SiteModel, SpecimenModel.site_id == SiteModel.id)
+        .group_by(sql_func.coalesce(SiteModel.name, "No location"))
+        .order_by(sql_func.count(SpecimenModel.id).desc())
+        .limit(15)
+        .all()
+    )
+    by_site = [{"name": r[0], "value": r[1]} for r in by_site_rows]
 
     # By collector
     by_collector_rows = (
@@ -358,6 +381,21 @@ def get_specimen_stats(
         .all()
     )
     by_species = [{"name": r[0], "value": r[1]} for r in by_species_rows]
+
+    # By taxonomic family
+    by_family_rows = (
+        db.query(
+            sql_func.coalesce(SpeciesModel.family, "Unknown"),
+            sql_func.count(SpecimenModel.id.distinct())
+        )
+        .join(SpecimenSpeciesModel, SpecimenSpeciesModel.specimen_id == SpecimenModel.id)
+        .outerjoin(SpeciesModel, SpecimenSpeciesModel.species_id == SpeciesModel.id)
+        .group_by(sql_func.coalesce(SpeciesModel.family, "Unknown"))
+        .order_by(sql_func.count(SpecimenModel.id.distinct()).desc())
+        .limit(15)
+        .all()
+    )
+    by_family = [{"name": r[0], "value": r[1]} for r in by_family_rows]
 
     # By sample type
     by_type_rows = (
@@ -414,11 +452,14 @@ def get_specimen_stats(
 
     return {
         "total": total,
+        "total_individuals": total_individuals,
         "this_month": this_month,
         "by_project": by_project,
+        "by_site": by_site,
         "by_collector": by_collector,
         "by_month": by_month,
         "by_species": by_species,
+        "by_family": by_family,
         "by_sample_type": by_sample_type,
         "by_storage": by_storage,
         "recent": [r.model_dump() for r in recent],

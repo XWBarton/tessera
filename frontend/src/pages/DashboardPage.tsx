@@ -5,7 +5,7 @@ import {
 } from 'antd'
 import {
   ExperimentOutlined, ProjectOutlined, TeamOutlined, CalendarOutlined,
-  SettingOutlined, HolderOutlined,
+  SettingOutlined, HolderOutlined, AppstoreOutlined,
 } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import {
@@ -18,6 +18,8 @@ import SpecimensByProject from '../components/charts/SpecimensByProject'
 import SpecimensByCollector from '../components/charts/SpecimensByCollector'
 import SpecimensByMonth from '../components/charts/SpecimensByMonth'
 import SpecimensBySpecies from '../components/charts/SpecimensBySpecies'
+import SpecimensBySite from '../components/charts/SpecimensBySite'
+import SpecimensByFamily from '../components/charts/SpecimensByFamily'
 import SampleTypeSplit from '../components/charts/SampleTypeSplit'
 import StorageUsageChart from '../components/charts/StorageUsageChart'
 import type { Specimen } from '../types'
@@ -25,27 +27,30 @@ import type { Specimen } from '../types'
 // ── Widget registry ────────────────────────────────────────────────────────
 
 type WidgetKey =
-  | 'stat_total_tubes' | 'stat_projects' | 'stat_team' | 'stat_this_month'
-  | 'chart_by_project' | 'chart_by_collector' | 'chart_by_month' | 'chart_by_species'
-  | 'chart_sample_type' | 'chart_leaderboard' | 'chart_storage'
+  | 'stat_total_tubes' | 'stat_total_individuals' | 'stat_projects' | 'stat_team' | 'stat_this_month'
+  | 'chart_by_project' | 'chart_by_site' | 'chart_by_collector' | 'chart_by_month' | 'chart_by_species'
+  | 'chart_by_family' | 'chart_sample_type' | 'chart_leaderboard' | 'chart_storage'
   | 'list_recent' | 'list_low_qty'
 
 interface WidgetDef { key: WidgetKey; title: string; type: 'stat' | 'half' | 'full'; group: string }
 
 const WIDGETS: WidgetDef[] = [
-  { key: 'stat_total_tubes',   title: 'Total Tubes',           type: 'stat', group: 'Stats' },
-  { key: 'stat_projects',      title: 'Projects',              type: 'stat', group: 'Stats' },
-  { key: 'stat_team',          title: 'Team Members',          type: 'stat', group: 'Stats' },
-  { key: 'stat_this_month',    title: 'Tubes This Month',      type: 'stat', group: 'Stats' },
-  { key: 'chart_by_project',   title: 'Tubes by Project',      type: 'half', group: 'Charts' },
-  { key: 'chart_by_collector', title: 'Tubes by Collector',    type: 'half', group: 'Charts' },
-  { key: 'chart_by_month',     title: 'Tubes by Month',        type: 'half', group: 'Charts' },
-  { key: 'chart_by_species',   title: 'Tubes by Species',      type: 'half', group: 'Charts' },
-  { key: 'chart_sample_type',  title: 'Sample Type Split',     type: 'half', group: 'Charts' },
-  { key: 'chart_leaderboard',  title: 'Collector Leaderboard', type: 'half', group: 'Charts' },
-  { key: 'chart_storage',      title: 'Storage Usage',         type: 'half', group: 'Charts' },
-  { key: 'list_recent',        title: 'Recent Additions',      type: 'full', group: 'Lists' },
-  { key: 'list_low_qty',       title: 'Low Quantity Alerts',   type: 'full', group: 'Lists' },
+  { key: 'stat_total_tubes',       title: 'Total Tubes',           type: 'stat', group: 'Stats' },
+  { key: 'stat_total_individuals', title: 'Total Specimens',       type: 'stat', group: 'Stats' },
+  { key: 'stat_projects',          title: 'Projects',              type: 'stat', group: 'Stats' },
+  { key: 'stat_team',              title: 'Team Members',          type: 'stat', group: 'Stats' },
+  { key: 'stat_this_month',        title: 'Tubes This Month',      type: 'stat', group: 'Stats' },
+  { key: 'chart_by_project',       title: 'Tubes by Project',      type: 'half', group: 'Charts' },
+  { key: 'chart_by_site',          title: 'Tubes by Location',     type: 'half', group: 'Charts' },
+  { key: 'chart_by_collector',     title: 'Tubes by Collector',    type: 'half', group: 'Charts' },
+  { key: 'chart_by_month',         title: 'Tubes by Month',        type: 'half', group: 'Charts' },
+  { key: 'chart_by_species',       title: 'Tubes by Species',      type: 'half', group: 'Charts' },
+  { key: 'chart_by_family',        title: 'Tubes by Family',       type: 'half', group: 'Charts' },
+  { key: 'chart_sample_type',      title: 'Sample Type Split',     type: 'half', group: 'Charts' },
+  { key: 'chart_leaderboard',      title: 'Collector Leaderboard', type: 'half', group: 'Charts' },
+  { key: 'chart_storage',          title: 'Storage Usage',         type: 'half', group: 'Charts' },
+  { key: 'list_recent',            title: 'Recent Additions',      type: 'full', group: 'Lists' },
+  { key: 'list_low_qty',           title: 'Low Quantity Alerts',   type: 'full', group: 'Lists' },
 ]
 
 const STORAGE_KEY = 'tessera_dashboard_widgets'
@@ -190,7 +195,7 @@ export default function DashboardPage() {
   const fullWidgets = enabled.filter((k) => WIDGETS.find((w) => w.key === k && w.type === 'full'))
 
   const statSmSpan = statWidgets.length >= 3 ? 8 : 12
-  const statMdSpan = statWidgets.length === 4 ? 6 : statWidgets.length === 3 ? 8 : statWidgets.length === 2 ? 12 : 24
+  const statMdSpan = statWidgets.length >= 4 ? 6 : statWidgets.length === 3 ? 8 : statWidgets.length === 2 ? 12 : 24
 
   const openDrawer = () => { setDraft([...enabled]); setDrawerOpen(true) }
   const saveAndClose = () => {
@@ -248,6 +253,8 @@ export default function DashboardPage() {
     switch (key) {
       case 'stat_total_tubes':
         return <Card style={s}><Statistic title="Total Tubes" value={stats?.total || 0} prefix={<ExperimentOutlined />} valueStyle={{ color: '#2e7d32' }} /></Card>
+      case 'stat_total_individuals':
+        return <Card style={s}><Statistic title="Total Specimens" value={stats?.total_individuals || 0} prefix={<AppstoreOutlined />} valueStyle={{ color: '#fa8c16' }} /></Card>
       case 'stat_projects':
         return <Card style={s}><Statistic title="Projects" value={projects?.length || 0} prefix={<ProjectOutlined />} /></Card>
       case 'stat_team':
@@ -263,9 +270,11 @@ export default function DashboardPage() {
     let content: ReactNode
     switch (key) {
       case 'chart_by_project':   content = <SpecimensByProject data={stats?.by_project} />; break
+      case 'chart_by_site':      content = <SpecimensBySite data={stats?.by_site} />; break
       case 'chart_by_collector': content = <SpecimensByCollector data={stats?.by_collector} />; break
       case 'chart_by_month':     content = <SpecimensByMonth data={stats?.by_month} />; break
       case 'chart_by_species':   content = <SpecimensBySpecies data={stats?.by_species} />; break
+      case 'chart_by_family':    content = <SpecimensByFamily data={stats?.by_family} />; break
       case 'chart_sample_type':  content = <SampleTypeSplit data={stats?.by_sample_type} />; break
       case 'chart_leaderboard':  content = <CollectorLeaderboard data={stats?.by_collector} />; break
       case 'chart_storage':      content = <StorageUsageChart data={stats?.by_storage} />; break
