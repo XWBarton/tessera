@@ -2,7 +2,7 @@ import re
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy import or_
+from sqlalchemy import and_, or_
 from ..models.specimen import Specimen, specimen_additional_projects_table
 from ..models.specimen_species import SpecimenSpecies
 from ..models.specimen_code_reservation import SpecimenCodeReservation
@@ -55,22 +55,18 @@ def _build_base_query(
                 Specimen.sites.any(Site.id == site_id),
             )
         ).distinct()
+    # All species-level filters must match the same association row
+    assoc_conds = []
     if species_id:
-        query = query.join(Specimen.species_associations).filter(
-            SpecimenSpecies.species_id == species_id
-        )
+        assoc_conds.append(SpecimenSpecies.species_id == species_id)
     if confidence:
-        query = query.join(Specimen.species_associations).filter(
-            SpecimenSpecies.confidence == confidence
-        )
+        assoc_conds.append(SpecimenSpecies.confidence == confidence)
     if life_stage:
-        query = query.join(Specimen.species_associations).filter(
-            SpecimenSpecies.life_stage == life_stage
-        )
+        assoc_conds.append(SpecimenSpecies.life_stage == life_stage)
     if sex:
-        query = query.join(Specimen.species_associations).filter(
-            SpecimenSpecies.sex == sex
-        )
+        assoc_conds.append(SpecimenSpecies.sex == sex)
+    if assoc_conds:
+        query = query.filter(Specimen.species_associations.any(and_(*assoc_conds)))
     if date_from:
         query = query.filter(Specimen.collection_date >= date_from)
     if date_to:
@@ -101,7 +97,16 @@ def get_specimens(
     limit: int = 50,
 ) -> Tuple[List[Specimen], int]:
     query = _build_base_query(
-        db, project_id, collector_id, species_id, confidence, life_stage, sex, date_from, date_to, search
+        db,
+        project_id=project_id,
+        collector_id=collector_id,
+        species_id=species_id,
+        confidence=confidence,
+        life_stage=life_stage,
+        sex=sex,
+        date_from=date_from,
+        date_to=date_to,
+        search=search,
     )
     total = query.count()
 
