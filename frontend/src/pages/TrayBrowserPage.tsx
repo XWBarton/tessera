@@ -114,12 +114,14 @@ export default function TrayBrowserPage() {
                     borderRadius: 4,
                     padding: '6px 4px',
                     textAlign: 'center',
-                    cursor: occupants.length === 1 ? 'pointer' : 'default',
+                    cursor: occupants.length <= 1 ? 'pointer' : 'default',
                     background: isEmpty ? '#fafafa' : '#e6f4ff',
                     minHeight: 54,
                   }}
+                  title={isEmpty ? 'Add a new tube here' : undefined}
                   onClick={() => {
-                    if (occupants.length === 1) navigate(`/specimens/${occupants[0].id}`)
+                    if (isEmpty) navigate(`/specimens/new?tray=${trayId}&pos=${pos}`)
+                    else if (occupants.length === 1) navigate(`/specimens/${occupants[0].id}`)
                   }}
                 >
                   <div style={{ fontSize: 11, color: '#888' }}>{pos}</div>

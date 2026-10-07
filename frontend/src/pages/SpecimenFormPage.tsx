@@ -168,10 +168,13 @@ export default function SpecimenFormPage() {
     } else if (!isEdit) {
       setCollectorMode('user')
       const codeParam = searchParams.get('code')
+      const trayParam = Number(searchParams.get('tray')) || undefined
+      const posParam = Number(searchParams.get('pos')) || undefined
       form.setFieldsValue({
         collector_id: user?.id,
         species_associations: [],
         ...(codeParam ? { specimen_code: codeParam } : {}),
+        ...(trayParam ? { storage_tray_id: trayParam, storage_position: posParam } : {}),
       })
     }
   }, [isEdit, specimen, form, user, searchParams])
