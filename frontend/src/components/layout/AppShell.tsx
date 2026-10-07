@@ -27,12 +27,12 @@ const { Text } = Typography
 const collectionItems = [
   { key: '/specimens', icon: <ExperimentOutlined />, label: 'Tubes' },
   { key: '/projects', icon: <ProjectOutlined />, label: 'Projects' },
+  { key: '/storage/trays', icon: <AppstoreOutlined />, label: 'Find in Fridge' },
 ]
 
 const referenceItems = [
   { key: '/species', icon: <BugOutlined />, label: 'Species' },
   { key: '/sites', icon: <PushpinOutlined />, label: 'Sites' },
-  { key: '/storage/trays', icon: <AppstoreOutlined />, label: 'Find in Fridge' },
   { key: '/storage', icon: <InboxOutlined />, label: 'Storage' },
 ]
 
