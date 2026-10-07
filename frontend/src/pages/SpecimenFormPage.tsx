@@ -77,6 +77,8 @@ export default function SpecimenFormPage() {
   const [reservation, setReservation] = useState<CodeReservation | null>(null)
   const activeReservationRef = useRef<{ projectId: number; reservationId: number } | null>(null)
   const hasCustomCode = !!watchedCustomCode
+  const addAnotherRef = useRef(false)
+  const [reserveNonce, setReserveNonce] = useState(0)
 
   useEffect(() => {
     if (isEdit || !watchedProjectId || hasCustomCode) {
@@ -105,7 +107,7 @@ export default function SpecimenFormPage() {
       setReservation(null)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isEdit, watchedProjectId, hasCustomCode])
+  }, [isEdit, watchedProjectId, hasCustomCode, reserveNonce])
 
   // Host organism is selectable from the species lookup table (plus fixed options)
   const { data: hostSpecies } = useSpecies(hostQuery || undefined)
@@ -267,11 +269,27 @@ export default function SpecimenFormPage() {
         // cleanup doesn't fire a redundant release call for an already-gone row.
         activeReservationRef.current = null
         message.success(`Tube ${created.specimen_code} created`)
-        navigate(`/specimens/${created.id}`)
+        if (addAnotherRef.current) {
+          // Keep the shared fields as a template; clear only what is per-tube.
+          const pos = values.storage_position as number | undefined
+          const nextPos = pos && (!selectedTray || pos < selectedTray.capacity) ? pos + 1 : undefined
+          form.setFieldsValue({
+            specimen_code: undefined,
+            species_associations: [],
+            notes: undefined,
+            storage_position: nextPos,
+          })
+          setReserveNonce((n) => n + 1)
+          window.scrollTo({ top: 0, behavior: 'smooth' })
+        } else {
+          navigate(`/specimens/${created.id}`)
+        }
       }
     } catch (e: unknown) {
       const err = e as { response?: { data?: { detail?: string } } }
       message.error(err.response?.data?.detail || 'Failed to save tube')
+    } finally {
+      addAnotherRef.current = false
     }
   }
 
@@ -591,6 +609,15 @@ export default function SpecimenFormPage() {
               >
                 {isEdit ? 'Update Tube' : 'Create Tube'}
               </Button>
+              {!isEdit && (
+                <Button
+                  htmlType="submit"
+                  loading={createSpecimen.isPending}
+                  onClick={() => { addAnotherRef.current = true }}
+                >
+                  Save &amp; add another
+                </Button>
+              )}
               <Button onClick={() => navigate(-1)}>Cancel</Button>
             </Space>
           </Form.Item>
