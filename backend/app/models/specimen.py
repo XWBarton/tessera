@@ -45,6 +45,8 @@ class Specimen(Base):
     collection_lon: Mapped[float] = mapped_column(Float, nullable=True)
     collection_location_text: Mapped[str] = mapped_column(Text, nullable=True)
     storage_location: Mapped[str] = mapped_column(String(200), nullable=True)
+    storage_tray_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("storage_trays.id"), nullable=True)
+    storage_position: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     preservation_method: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     host_organism: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="active", server_default="active")
@@ -63,6 +65,7 @@ class Specimen(Base):
     sites = relationship("Site", secondary=specimen_sites_table, lazy="select")
     additional_projects = relationship("Project", secondary=specimen_additional_projects_table, lazy="select")
     sample_type = relationship("SampleType", back_populates="specimens")
+    storage_tray = relationship("StorageTray", back_populates="specimens")
     usage_log = relationship("TubeUsageLog", back_populates="specimen", cascade="all, delete-orphan")
     species_associations = relationship(
         "SpecimenSpecies", back_populates="specimen", cascade="all, delete-orphan"

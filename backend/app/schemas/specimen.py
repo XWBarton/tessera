@@ -6,6 +6,7 @@ from .user import UserRead
 from .project import ProjectRead
 from .site import SiteRead
 from .sample_type import SampleTypeRead
+from .storage import StorageTrayRead
 
 
 class SpecimenSpeciesBase(BaseModel):
@@ -59,6 +60,8 @@ class SpecimenBase(BaseModel):
     collection_lon: Optional[float] = None
     collection_location_text: Optional[str] = None
     storage_location: Optional[str] = None
+    storage_tray_id: Optional[int] = None
+    storage_position: Optional[int] = None
     preservation_method: Optional[str] = None
     host_organism: Optional[str] = None
     status: str = "active"
@@ -88,6 +91,8 @@ class SpecimenUpdate(BaseModel):
     collection_lon: Optional[float] = None
     collection_location_text: Optional[str] = None
     storage_location: Optional[str] = None
+    storage_tray_id: Optional[int] = None
+    storage_position: Optional[int] = None
     preservation_method: Optional[str] = None
     host_organism: Optional[str] = None
     status: Optional[str] = None
@@ -105,7 +110,6 @@ class SpecimenBulkImportRow(BaseModel):
     sample_type_name: Optional[str] = None
     quantity_value: Optional[float] = None
     quantity_unit: Optional[str] = None
-    storage_location: Optional[str] = None
     notes: Optional[str] = None
     species: Optional[str] = None  # semicolon-separated free-text species names
 
@@ -139,6 +143,7 @@ class SpecimenDetail(SpecimenRead):
     sites: List[SiteRead] = []
     sample_type: Optional[SampleTypeRead] = None
     species_associations: List[SpecimenSpeciesRead] = []
+    storage_tray: Optional[StorageTrayRead] = None
     restricted: bool = False
 
     class Config:

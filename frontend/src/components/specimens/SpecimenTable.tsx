@@ -102,10 +102,11 @@ export default function SpecimenTable({
     },
     {
       title: 'Storage',
-      key: 'storage_location',
+      key: 'storage',
       render: (_: unknown, r: Specimen) => {
         if (r.restricted) return <Tooltip title="Access restricted"><span style={{ color: '#bbb' }}>—</span></Tooltip>
-        return r.storage_location || '—'
+        if (!r.storage_tray) return '—'
+        return `${r.storage_tray.unit?.name ? `${r.storage_tray.unit.name} / ` : ''}${r.storage_tray.name}${r.storage_position != null ? ` / ${r.storage_position}` : ''}`
       },
     },
     {

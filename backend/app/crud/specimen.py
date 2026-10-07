@@ -8,6 +8,7 @@ from ..models.specimen_species import SpecimenSpecies
 from ..models.specimen_code_reservation import SpecimenCodeReservation
 from ..models.project import Project
 from ..models.site import Site
+from ..models.storage import StorageTray
 from ..schemas.specimen import SpecimenCreate, SpecimenUpdate
 from typing import Optional, List, Tuple
 from datetime import date, datetime, timedelta, timezone
@@ -36,6 +37,7 @@ def _build_base_query(
         joinedload(Specimen.sites),
         joinedload(Specimen.sample_type),
         joinedload(Specimen.species_associations).joinedload(SpecimenSpecies.species),
+        joinedload(Specimen.storage_tray).joinedload(StorageTray.unit),
     )
     if project_id:
         query = query.filter(
@@ -124,6 +126,7 @@ def get_specimen(db: Session, specimen_id: int) -> Optional[Specimen]:
             joinedload(Specimen.sites),
             joinedload(Specimen.sample_type),
             joinedload(Specimen.species_associations).joinedload(SpecimenSpecies.species),
+            joinedload(Specimen.storage_tray).joinedload(StorageTray.unit),
         )
         .filter(Specimen.id == specimen_id)
         .first()
@@ -273,6 +276,8 @@ def _create_specimen_attempt(
         collection_lon=specimen_data.collection_lon,
         collection_location_text=specimen_data.collection_location_text,
         storage_location=specimen_data.storage_location,
+        storage_tray_id=specimen_data.storage_tray_id,
+        storage_position=specimen_data.storage_position,
         notes=specimen_data.notes,
         sites=site_objs,
         additional_projects=additional_project_objs,

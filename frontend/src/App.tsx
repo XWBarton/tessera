@@ -15,6 +15,8 @@ import ProjectDetailPage from './pages/ProjectDetailPage'
 import MapPage from './pages/MapPage'
 import SitesPage from './pages/SitesPage'
 import SpeciesPage from './pages/SpeciesPage'
+import StorageAdminPage from './pages/StorageAdminPage'
+import TrayBrowserPage from './pages/TrayBrowserPage'
 import TimelinePage from './pages/TimelinePage'
 import ExplorePage from './pages/ExplorePage'
 import ExportPage from './pages/ExportPage'
@@ -52,6 +54,9 @@ function App() {
           <Route path="timeline" element={<Navigate to="/explore" replace />} />
           <Route path="sites" element={<SitesPage />} />
           <Route path="species" element={<SpeciesPage />} />
+          <Route path="storage" element={<StorageAdminPage />} />
+          <Route path="storage/trays" element={<TrayBrowserPage />} />
+          <Route path="storage/trays/:id" element={<TrayBrowserPage />} />
           <Route path="export" element={<ExportPage />} />
           <Route path="help" element={<HelpPage />} />
           <Route

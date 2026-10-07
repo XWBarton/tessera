@@ -50,8 +50,11 @@ export default function ProjectDetailPage() {
     },
     {
       title: 'Storage',
-      dataIndex: 'storage_location',
-      key: 'storage_location',
+      key: 'storage',
+      render: (_: unknown, r: Specimen) =>
+        r.storage_tray
+          ? `${r.storage_tray.unit?.name ? `${r.storage_tray.unit.name} / ` : ''}${r.storage_tray.name}${r.storage_position != null ? ` / ${r.storage_position}` : ''}`
+          : '—',
     },
   ]
 

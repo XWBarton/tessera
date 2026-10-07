@@ -9,9 +9,9 @@ from .config import settings
 from .database import engine, SessionLocal, Base
 from .models import (
     User, Project, Species, Site, SampleType, Specimen, SpecimenSpecies,
-    TubeUsageLog, LookupOption, SpecimenCodeReservation,
+    TubeUsageLog, LookupOption, SpecimenCodeReservation, StorageUnit, StorageTray,
 )
-from .routers import auth, users, projects, species, sites, sample_types, specimens, export, lookups, setup, app_settings, sql_console
+from .routers import auth, users, projects, species, sites, sample_types, specimens, export, lookups, setup, app_settings, sql_console, storage
 from .crud.user import get_user_by_username, create_user
 from .crud.sample_type import seed_sample_types
 from .crud.lookup_option import seed_lookup_options
@@ -57,6 +57,8 @@ def run_migrations():
             ("species", "family", "TEXT", None),
             ("species", "order_name", "TEXT", None),
             ("species", "taxon_id", "TEXT", None),
+            ("specimens", "storage_tray_id", "INTEGER REFERENCES storage_trays(id)", None),
+            ("specimens", "storage_position", "INTEGER", None),
         ]
         for migration in add_column_migrations:
             table, column, col_def = migration[0], migration[1], migration[2]
@@ -252,6 +254,7 @@ app.include_router(export.router)
 app.include_router(lookups.router)
 app.include_router(app_settings.router)
 app.include_router(sql_console.router)
+app.include_router(storage.router)
 
 
 @app.on_event("startup")

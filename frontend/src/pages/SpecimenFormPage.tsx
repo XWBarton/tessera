@@ -30,6 +30,7 @@ import { useAuth } from '../context/AuthContext'
 import SpeciesAssociationForm from '../components/specimens/SpeciesAssociationForm'
 import type { SpecimenCreate, SpecimenUpdate, SpecimenSpeciesCreate, Site } from '../types'
 import { useLookupOptions } from '../hooks/useLookups'
+import { useStorageTrays, useStorageTrayPositions } from '../hooks/useStorage'
 
 type CollectorMode = 'user' | 'name' | 'unknown'
 
@@ -53,6 +54,13 @@ export default function SpecimenFormPage() {
   const updateSpecimen = useUpdateSpecimen(specimenId)
   const { data: unitOpts } = useLookupOptions('unit')
   const unitOptions = (unitOpts ?? []).map((o) => ({ value: o.value }))
+  const { data: storageTrays } = useStorageTrays()
+  const watchedTrayId: number | undefined = Form.useWatch('storage_tray_id', form)
+  const watchedPosition: number | undefined = Form.useWatch('storage_position', form)
+  const selectedTray = storageTrays?.find((t) => t.id === watchedTrayId)
+  const { data: trayPositions } = useStorageTrayPositions(watchedTrayId ?? 0)
+  const positionOccupants = (trayPositions?.find((p) => p.position === watchedPosition)?.occupants ?? [])
+    .filter((o) => !isEdit || o.id !== specimenId)
 
   // Watch species associations to derive total count
   const watchedAssociations: SpecimenSpeciesCreate[] = Form.useWatch('species_associations', form) || []
@@ -140,7 +148,8 @@ export default function SpecimenFormPage() {
         collection_lat: specimen.collection_lat,
         collection_lon: specimen.collection_lon,
         collection_location_text: specimen.collection_location_text,
-        storage_location: specimen.storage_location,
+        storage_tray_id: specimen.storage_tray_id,
+        storage_position: specimen.storage_position,
         preservation_method: specimen.preservation_method,
         host_organism: specimen.host_organism,
         status: specimen.status || 'active',
@@ -217,7 +226,8 @@ export default function SpecimenFormPage() {
           collection_lat: values.collection_lat as number | undefined,
           collection_lon: values.collection_lon as number | undefined,
           collection_location_text: values.collection_location_text as string | undefined,
-          storage_location: values.storage_location as string | undefined,
+          storage_tray_id: values.storage_tray_id as number | undefined,
+          storage_position: values.storage_position as number | undefined,
           preservation_method: values.preservation_method as string | undefined,
           host_organism: values.host_organism as string | undefined,
           status: values.status as string | undefined,
@@ -244,7 +254,8 @@ export default function SpecimenFormPage() {
           collection_lat: values.collection_lat as number | undefined,
           collection_lon: values.collection_lon as number | undefined,
           collection_location_text: values.collection_location_text as string | undefined,
-          storage_location: values.storage_location as string | undefined,
+          storage_tray_id: values.storage_tray_id as number | undefined,
+          storage_position: values.storage_position as number | undefined,
           preservation_method: values.preservation_method as string | undefined,
           host_organism: values.host_organism as string | undefined,
           status: values.status as string | undefined,
@@ -473,9 +484,43 @@ export default function SpecimenFormPage() {
           <Form.Item name="collection_lat" hidden><Input /></Form.Item>
           <Form.Item name="collection_lon" hidden><Input /></Form.Item>
 
-          <Form.Item name="storage_location" label="Storage Location">
-            <Input placeholder="e.g. Freezer-A1, Shelf-3" />
-          </Form.Item>
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item name="storage_tray_id" label="Storage Tray">
+                <Select
+                  placeholder="Select tray"
+                  allowClear
+                  showSearch
+                  optionFilterProp="label"
+                  options={(storageTrays ?? []).map((t) => ({
+                    value: t.id,
+                    label: `${t.unit?.name ? `${t.unit.name} / ` : ''}${t.name}`,
+                  }))}
+                  onChange={() => form.setFieldsValue({ storage_position: undefined })}
+                />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="storage_position" label="Position" help={selectedTray ? `1–${selectedTray.capacity}` : undefined}>
+                <InputNumber
+                  style={{ width: '100%' }}
+                  min={1}
+                  max={selectedTray?.capacity}
+                  disabled={!selectedTray}
+                  placeholder="e.g. 7"
+                />
+              </Form.Item>
+            </Col>
+          </Row>
+          {positionOccupants.length > 0 && (
+            <Alert
+              type="warning"
+              showIcon
+              style={{ marginBottom: 16 }}
+              message={`Position ${watchedPosition} already holds: ${positionOccupants.map((o) => o.specimen_code).join(', ')}`}
+              description="Saving will add this tube to the same position — only do this if they genuinely share one physical tube."
+            />
+          )}
 
           <Row gutter={16}>
             <Col span={12}>

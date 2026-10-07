@@ -15,6 +15,8 @@ import {
   UserOutlined,
   ImportOutlined,
   QuestionCircleOutlined,
+  InboxOutlined,
+  AppstoreOutlined,
 } from '@ant-design/icons'
 import { useAuth } from '../../context/AuthContext'
 import { uploadAvatar, getAvatarBlob } from '../../api/users'
@@ -30,6 +32,8 @@ const collectionItems = [
 const referenceItems = [
   { key: '/species', icon: <BugOutlined />, label: 'Species' },
   { key: '/sites', icon: <PushpinOutlined />, label: 'Sites' },
+  { key: '/storage/trays', icon: <AppstoreOutlined />, label: 'Find in Fridge' },
+  { key: '/storage', icon: <InboxOutlined />, label: 'Storage' },
 ]
 
 const exploreItems = [

@@ -756,7 +756,18 @@ export default function SpecimenDetailPage() {
               : '—'}
           </Descriptions.Item>
           <Descriptions.Item label="Storage">
-            {specimen.storage_location || '—'}
+            {specimen.storage_tray ? (
+              <Space size={4}>
+                <span>
+                  {specimen.storage_tray.unit?.name ? `${specimen.storage_tray.unit.name} / ` : ''}
+                  {specimen.storage_tray.name}
+                  {specimen.storage_position != null ? ` / Position ${specimen.storage_position}` : ''}
+                </span>
+                <a onClick={() => navigate(`/storage/trays/${specimen.storage_tray!.id}?pos=${specimen.storage_position ?? ''}`)}>
+                  Locate in tray
+                </a>
+              </Space>
+            ) : '—'}
           </Descriptions.Item>
           <Descriptions.Item label="Preservation">
             {specimen.preservation_method || '—'}

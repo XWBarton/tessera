@@ -31,6 +31,35 @@ export interface Species {
   created_at: string
 }
 
+export interface StorageUnit {
+  id: number
+  name: string
+  notes?: string
+  created_at: string
+}
+
+export interface StorageTray {
+  id: number
+  unit_id: number
+  name: string
+  capacity: number
+  notes?: string
+  created_at: string
+  unit?: StorageUnit
+}
+
+export interface StorageOccupant {
+  id: number
+  specimen_code: string
+  project_code: string
+  species: string
+}
+
+export interface StorageTrayPosition {
+  position: number
+  occupants: StorageOccupant[]
+}
+
 export interface SiteProject {
   id: number
   code: string
@@ -83,7 +112,8 @@ export interface Specimen {
   collection_lat?: number
   collection_lon?: number
   collection_location_text?: string
-  storage_location?: string
+  storage_tray_id?: number
+  storage_position?: number
   preservation_method?: string
   host_organism?: string
   status?: string
@@ -97,6 +127,7 @@ export interface Specimen {
   sites: Site[]
   sample_type?: SampleType
   species_associations: SpecimenSpecies[]
+  storage_tray?: StorageTray
   restricted?: boolean
 }
 
@@ -137,7 +168,8 @@ export interface SpecimenCreate {
   collection_lat?: number
   collection_lon?: number
   collection_location_text?: string
-  storage_location?: string
+  storage_tray_id?: number
+  storage_position?: number
   preservation_method?: string
   host_organism?: string
   status?: string
@@ -161,7 +193,8 @@ export interface SpecimenUpdate {
   collection_lat?: number
   collection_lon?: number
   collection_location_text?: string
-  storage_location?: string
+  storage_tray_id?: number
+  storage_position?: number
   preservation_method?: string
   host_organism?: string
   status?: string
@@ -179,7 +212,6 @@ export interface BulkImportRow {
   sample_type_name?: string
   quantity_value?: number
   quantity_unit?: string
-  storage_location?: string
   notes?: string
   species?: string
 }

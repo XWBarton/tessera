@@ -28,7 +28,6 @@ const TEMPLATE_COLUMNS = [
   'sample_type_name',
   'quantity_value',
   'quantity_unit',
-  'storage_location',
   'notes',
   'species',
 ]
@@ -43,7 +42,6 @@ const TEMPLATE_EXAMPLE = [
   'Specimen',
   '6',
   'specimens',
-  'Freezer B2',
   '',
   'Rana temporaria|4|adult|F|Confirmed;Bufo bufo|2|instar 3||Probable',
 ]
@@ -87,7 +85,6 @@ function rowsToImport(headers: string[], rows: string[][]): BulkImportRow[] {
       sample_type_name: obj.sample_type_name || undefined,
       quantity_value: obj.quantity_value ? parseFloat(obj.quantity_value) : undefined,
       quantity_unit: obj.quantity_unit || undefined,
-      storage_location: obj.storage_location || undefined,
       notes: obj.notes || undefined,
       species: obj.species || undefined,
     }
@@ -101,7 +98,6 @@ const previewColumns = [
   { title: 'Collector', dataIndex: 'collector_name', key: 'collector_name', render: (v: string) => v || '—' },
   { title: 'Sample Type', dataIndex: 'sample_type_name', key: 'sample_type_name', render: (v: string) => v || '—' },
   { title: 'Qty', key: 'qty', render: (_: unknown, r: BulkImportRow) => r.quantity_value != null ? `${r.quantity_value} ${r.quantity_unit || ''}` : '—' },
-  { title: 'Storage', dataIndex: 'storage_location', key: 'storage_location', render: (v: string) => v || '—' },
   {
     title: 'Species',
     dataIndex: 'species',

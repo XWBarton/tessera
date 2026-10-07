@@ -17,6 +17,7 @@ from ..crud.specimen import (
     delete_specimen,
 )
 from ..crud.project import get_project
+from ..crud.storage import get_tray
 from ..crud.tube_usage_log import get_usage_log, create_usage_event, update_usage_event, delete_usage_event
 from ..models.specimen_species import SpecimenSpecies as SpecimenSpeciesModel
 from ..schemas.specimen import (
@@ -61,6 +62,18 @@ MAX_PHOTO_SIZE_BYTES = 20 * 1024 * 1024  # 20 MB
 router = APIRouter(prefix="/specimens", tags=["specimens"])
 
 
+def _validate_storage_position(db: Session, tray_id: Optional[int], position: Optional[int]) -> None:
+    if tray_id is None:
+        if position is not None:
+            raise HTTPException(status_code=400, detail="storage_position requires a storage_tray_id")
+        return
+    tray = get_tray(db, tray_id)
+    if not tray:
+        raise HTTPException(status_code=404, detail="Storage tray not found")
+    if position is not None and not (1 <= position <= tray.capacity):
+        raise HTTPException(status_code=400, detail=f"Position must be between 1 and {tray.capacity}")
+
+
 def _has_access(project, user) -> bool:
     if not project or not project.is_protected:
         return True
@@ -89,11 +102,25 @@ def _mask_restricted_specimen(d: dict) -> dict:
         "collection_lon": None,
         "collection_location_text": None,
         "storage_location": None,
+        "storage_tray_id": None,
+        "storage_position": None,
+        "storage_tray": None,
         "notes": None,
         "species_associations": [],
         "restricted": True,
     })
     return d
+
+
+def _storage_display(specimen) -> str:
+    tray = specimen.storage_tray
+    if not tray:
+        return ""
+    parts = [tray.unit.name if tray.unit else None, tray.name]
+    label = " / ".join(p for p in parts if p)
+    if specimen.storage_position is not None:
+        label = f"{label} / {specimen.storage_position}"
+    return label
 
 
 def _label_fields(specimen):
@@ -112,7 +139,7 @@ def _label_fields(specimen):
             if specimen.collection_date and specimen.collection_date_end
             else str(specimen.collection_date) if specimen.collection_date else ""
         ),
-        "storage": specimen.storage_location or "",
+        "storage": _storage_display(specimen),
     }
 
 
@@ -209,7 +236,7 @@ def _get_label_row(specimen) -> dict:
         "species": species_name,
         "collector": specimen.collector.full_name if specimen.collector else (specimen.collector_name or ""),
         "collection_date": str(specimen.collection_date) if specimen.collection_date else "",
-        "storage_location": specimen.storage_location or "",
+        "storage_location": _storage_display(specimen),
     }
 
 
@@ -270,6 +297,7 @@ def create_new_specimen(
     project = get_project(db, specimen.project_id)
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
+    _validate_storage_position(db, specimen.storage_tray_id, specimen.storage_position)
     try:
         return create_specimen(
             db, specimen, project, entered_by_id=current_user.id,
@@ -410,13 +438,20 @@ def get_specimen_stats(
     )
     by_sample_type = [{"name": r[0], "value": r[1]} for r in by_type_rows]
 
-    # By storage location
+    # By storage tray (fridge/freezer + tray)
+    from ..models.storage import StorageUnit as StorageUnitModel, StorageTray as StorageTrayModel
+
     by_storage_rows = (
         db.query(
-            sql_func.coalesce(SpecimenModel.storage_location, "No location"),
+            sql_func.coalesce(
+                StorageUnitModel.name + " / " + StorageTrayModel.name, "Not assigned"
+            ),
             sql_func.count(SpecimenModel.id)
         )
-        .group_by(sql_func.coalesce(SpecimenModel.storage_location, "No location"))
+        .select_from(SpecimenModel)
+        .outerjoin(StorageTrayModel, SpecimenModel.storage_tray_id == StorageTrayModel.id)
+        .outerjoin(StorageUnitModel, StorageTrayModel.unit_id == StorageUnitModel.id)
+        .group_by(sql_func.coalesce(StorageUnitModel.name + " / " + StorageTrayModel.name, "Not assigned"))
         .order_by(sql_func.count(SpecimenModel.id).desc())
         .limit(15)
         .all()
@@ -503,6 +538,12 @@ def update_existing_specimen(
         and not current_user.is_admin
     ):
         raise HTTPException(status_code=403, detail="Only admins can move tubes between projects")
+    provided = specimen_update.model_dump(exclude_unset=True)
+    _validate_storage_position(
+        db,
+        provided.get("storage_tray_id", specimen.storage_tray_id),
+        provided.get("storage_position", specimen.storage_position),
+    )
     try:
         return update_specimen(db, specimen, specimen_update)
     except IntegrityError:
@@ -839,7 +880,6 @@ def bulk_import_specimens(
                     quantity_value=row.quantity_value,
                     quantity_unit=row.quantity_unit or None,
                     quantity_remaining=qty_remaining,
-                    storage_location=row.storage_location or None,
                     notes=row.notes or None,
                     sites=[site_obj] if site_obj else [],
                 )
