@@ -137,6 +137,7 @@ export default function SpecimenFormPage() {
         : 'unknown'
       setCollectorMode(mode)
       form.setFieldsValue({
+        specimen_code: specimen.specimen_code,
         project_id: specimen.project_id,  // pre-select current project for admin edit
         additional_project_ids: specimen.additional_projects?.map(p => p.id) ?? [],
         collector_id: specimen.collector_id,
@@ -217,7 +218,9 @@ export default function SpecimenFormPage() {
 
     try {
       if (isEdit) {
+        const newCode = (values.specimen_code as string | undefined)?.trim()
         const updatePayload: SpecimenUpdate = {
+          specimen_code: user?.is_admin && newCode && newCode !== specimen?.specimen_code ? newCode : undefined,
           project_id: user?.is_admin ? (values.project_id as number | undefined) : undefined,
           additional_project_ids: (values.additional_project_ids as number[] | undefined) ?? [],
           collection_date: collectionDate,
@@ -361,11 +364,12 @@ export default function SpecimenFormPage() {
             />
           )}
 
-          {!isEdit && user?.is_admin && (
+          {user?.is_admin && (
             <Form.Item
               name="specimen_code"
-              label="Custom Code"
-              help="Leave blank to auto-generate (e.g. PROJ-042)"
+              label={isEdit ? 'Tube Code' : 'Custom Code'}
+              help={isEdit ? 'Admin only. Must be unique; changing it will not update labels already printed' : 'Leave blank to auto-generate (e.g. PROJ-042)'}
+              rules={isEdit ? [{ required: true, message: 'Tube code cannot be empty' }] : undefined}
             >
               <Input placeholder="e.g. XPG-333" style={{ maxWidth: 200 }} />
             </Form.Item>
