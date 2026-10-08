@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Typography, Table, Button, Modal, Form, Input, InputNumber, Space, message, Popconfirm, Tag, Select, Drawer, Spin, Tabs, TreeSelect, Alert, Tree, Segmented, Dropdown, Collapse, Radio } from 'antd'
-import { PlusOutlined, DeleteOutlined, EditOutlined, CopyOutlined, MergeCellsOutlined, TableOutlined, ApartmentOutlined, ClusterOutlined, DownloadOutlined, BorderOutlined } from '@ant-design/icons'
+import { Typography, Table, Button, Modal, Form, Input, InputNumber, Space, message, Popconfirm, Tag, Select, Drawer, Spin, Tabs, TreeSelect, Alert, Tree, Dropdown, Collapse, Radio, Descriptions } from 'antd'
+import { PlusOutlined, DeleteOutlined, EditOutlined, CopyOutlined, MergeCellsOutlined, ClusterOutlined, DownloadOutlined, BorderOutlined } from '@ant-design/icons'
 import { MapContainer, TileLayer, LayersControl, CircleMarker, Circle, GeoJSON, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import { useSites, useCreateSite, useUpdateSite, useDeleteSite, useSiteSpecimens, useSiteCounts, useSiteDuplicates, useMergeSite, useMoveSite, useBackfillHierarchy } from '../hooks/useSites'
@@ -49,7 +49,13 @@ const PRECISION_ZOOM: Record<string, number> = {
   State: 6,
 }
 
-const LEVEL_CHOICES = ['Country', 'State', 'County', 'Town', 'Locality', 'Site']
+// Only Country and State do anything (they fill in country / state on the sites beneath them);
+// everything else is just a site or area, and the tree shows how deep it sits.
+const LEVEL_CHOICES = [
+  { label: 'Site or area', value: '' },
+  { label: 'State / Territory', value: 'State' },
+  { label: 'Country', value: 'Country' },
+]
 
 const REASON_TEXT: Record<string, string> = { name: 'similar name', nearby: 'overlapping / very close location' }
 
@@ -76,8 +82,10 @@ function SiteForm({ onFinish, loading, initialValues, editingId, defaultParentId
 
   const parentSite = parentId != null ? allSites?.find((s) => s.id === parentId) : undefined
   const parentLevel = (parentSite?.level ?? '').toLowerCase()
-  const suggestedLevel = parentLevel === 'country' ? 'State' : parentLevel === 'state' ? 'County' : parentLevel === 'county' ? 'Town' : parentLevel === 'town' ? 'Locality' : undefined
-  const levelChoices = [...new Set([...LEVEL_CHOICES, ...(initialValues?.level ? [initialValues.level] : [])])]
+  const suggestedLevel = parentLevel === 'country' ? 'State' : undefined
+  // A site saved earlier with some other level (e.g. Town) keeps it as an extra choice
+  const legacyLevel = initialValues?.level && !LEVEL_CHOICES.some((c) => c.value === initialValues.level) ? initialValues.level : undefined
+  const levelChoices = legacyLevel ? [...LEVEL_CHOICES, { label: legacyLevel, value: legacyLevel }] : LEVEL_CHOICES
   // Open the optional sections up front only when editing a site that already has data in them
   const initialOpenPanels = [
     ...(initialValues && (initialValues.lat != null || initialValues.radius_m != null || initialValues.boundary || initialValues.precision) ? ['location'] : []),
@@ -134,17 +142,12 @@ function SiteForm({ onFinish, loading, initialValues, editingId, defaultParentId
       form={form}
       layout="vertical"
       onFinish={(values) => onFinish({ ...values, level: values.level || null, boundary })}
-      initialValues={{ parent_id: defaultParentId, ...initialValues }}
+      initialValues={{ parent_id: defaultParentId, ...initialValues, level: initialValues?.level || '' }}
     >
       <Form.Item name="level" label="What is it?" style={{ marginBottom: 8 }}>
         <Radio.Group optionType="button" buttonStyle="solid" options={levelChoices} />
       </Form.Item>
       <div style={{ marginBottom: 16, minHeight: 22 }}>
-        {levelValue && (
-          <Button type="link" size="small" style={{ padding: 0, marginRight: 12 }} onClick={() => form.setFieldsValue({ level: undefined })}>
-            Clear
-          </Button>
-        )}
         {suggestedLevel && suggestedLevel !== levelValue && (
           <Typography.Text type="secondary" style={{ fontSize: 13 }}>
             Under {parentSite?.name}, this is probably a{' '}
@@ -400,7 +403,7 @@ function SiteTreeView({ tree, sites, canEdit, onSelect, onAddChild }: {
         <Button size="small" onClick={() => setExpanded(collectKeys(tree))}>Expand all</Button>
         <Button size="small" onClick={() => setExpanded([])}>Collapse all</Button>
         <Typography.Text type="secondary" style={{ fontSize: 13 }}>
-          Click a site to open it. Use + Add on a site to create a sub-site under it.{canEdit ? ' Drag one onto another to move it.' : ''}
+          Click a site to see its details, edit it or export it. Use + Add on a site to create one inside it.{canEdit ? ' Drag one onto another to move it.' : ''}
         </Typography.Text>
       </Space>
       <Tree
@@ -503,7 +506,16 @@ function SiteMap({ site, loc }: { site: Site; loc: NonNullable<ReturnType<typeof
   )
 }
 
-function SiteSpecimensDrawer({ site, sites, onClose }: { site: Site; sites: Site[]; onClose: () => void }) {
+function SiteDrawer({ site, sites, isAdmin, onClose, onEdit, onAddChild, onMerge, onDelete }: {
+  site: Site
+  sites: Site[]
+  isAdmin: boolean
+  onClose: () => void
+  onEdit: (site: Site) => void
+  onAddChild: (site: Site) => void
+  onMerge: (site: Site) => void
+  onDelete: (site: Site) => void
+}) {
   const navigate = useNavigate()
   const { data: specimens, isLoading } = useSiteSpecimens(site.id)
   const loc = effectiveLocation(site, sites)
@@ -549,7 +561,47 @@ function SiteSpecimensDrawer({ site, sites, onClose }: { site: Site; sites: Site
     </>
   )
 
+  const detailRows: { label: string; value: React.ReactNode }[] = [
+    { label: 'Path', value: site.path },
+    ...(site.level ? [{ label: 'Type', value: site.level }] : []),
+    ...(site.country || site.state_province
+      ? [{ label: 'geo_loc_name', value: <Typography.Text code>{[site.country, site.state_province, site.name].filter(Boolean).join(':')}</Typography.Text> }]
+      : []),
+    ...(site.projects?.length ? [{ label: 'Projects', value: <Space size={4} wrap>{site.projects.map((p) => <Tag key={p.id} color="blue">{p.code}</Tag>)}</Space> }] : []),
+    ...(site.habitat_type ? [{ label: 'Habitat', value: site.habitat_type }] : []),
+    ...(site.description ? [{ label: 'Description', value: site.description }] : []),
+    ...(site.lat != null
+      ? [{
+          label: 'Coordinates',
+          value: (
+            <Space size={4}>
+              <span style={{ fontVariantNumeric: 'tabular-nums' }}>{site.lat}, {site.lon}</span>
+              <Button
+                type="text"
+                size="small"
+                icon={<CopyOutlined />}
+                style={{ color: '#aaa', padding: '0 2px' }}
+                onClick={() => { navigator.clipboard.writeText(`${site.lat}, ${site.lon}`); message.success('Copied to clipboard') }}
+              />
+            </Space>
+          ),
+        }]
+      : []),
+    ...(site.radius_m ? [{ label: 'Radius', value: `${site.radius_m} m` }] : []),
+    ...(site.boundary ? [{ label: 'Boundary', value: formatHa(boundaryAreaHa(site.boundary)) }] : []),
+    ...(site.notes ? [{ label: 'Notes', value: site.notes }] : []),
+  ]
+
   const tabItems = [
+    {
+      key: 'details',
+      label: 'Details',
+      children: (
+        <Descriptions bordered size="small" column={1} labelStyle={{ width: 130 }}>
+          {detailRows.map((r) => <Descriptions.Item key={r.label} label={r.label}>{r.value}</Descriptions.Item>)}
+        </Descriptions>
+      ),
+    },
     ...(hasCoords ? [{
       key: 'map',
       label: 'Map',
@@ -575,21 +627,37 @@ function SiteSpecimensDrawer({ site, sites, onClose }: { site: Site; sites: Site
       onClose={onClose}
       width={700}
       extra={
-        <Dropdown
-          menu={{
-            items: [
-              { key: 'geojson', label: 'GeoJSON (.geojson)' },
-              { key: 'shapefile', label: 'Shapefile (.zip)' },
-            ],
-            onClick: ({ key }) =>
-              runSiteExport(key as 'geojson' | 'shapefile', { siteId: site.id, name: site.name.replace(/[^\w-]+/g, '_') }),
-          }}
-        >
-          <Button size="small" icon={<DownloadOutlined />}>Export</Button>
-        </Dropdown>
+        <Space>
+          <Button size="small" icon={<PlusOutlined />} onClick={() => onAddChild(site)}>Add under</Button>
+          <Button size="small" icon={<EditOutlined />} onClick={() => onEdit(site)}>Edit</Button>
+          <Dropdown
+            menu={{
+              items: [
+                { key: 'geojson', label: 'Export GeoJSON (.geojson)' },
+                { key: 'shapefile', label: 'Export Shapefile (.zip)' },
+                ...(isAdmin ? [{ key: 'merge', label: 'Merge into another site…', icon: <MergeCellsOutlined /> }] : []),
+              ],
+              onClick: ({ key }) =>
+                key === 'merge'
+                  ? onMerge(site)
+                  : runSiteExport(key as 'geojson' | 'shapefile', { siteId: site.id, name: site.name.replace(/[^\w-]+/g, '_') }),
+            }}
+          >
+            <Button size="small">More</Button>
+          </Dropdown>
+          {isAdmin && (
+            <Popconfirm
+              title="Delete this site?"
+              description="Any sub-sites move up one level."
+              onConfirm={() => onDelete(site)}
+            >
+              <Button size="small" danger icon={<DeleteOutlined />} />
+            </Popconfirm>
+          )}
+        </Space>
       }
     >
-      <Tabs defaultActiveKey={hasCoords ? 'map' : 'specimens'} items={tabItems} />
+      <Tabs defaultActiveKey="details" items={tabItems} />
     </Drawer>
   )
 }
@@ -602,13 +670,6 @@ export default function SitesPage() {
   const { data: counts } = useSiteCounts()
   const { data: allSites } = useSites()
   const mergeSite = useMergeSite()
-  const [view, setView] = useState<'table' | 'tree'>(() => {
-    try { return localStorage.getItem('tessera.sitesView') === 'tree' ? 'tree' : 'table' } catch { return 'table' }
-  })
-  const changeView = (v: 'table' | 'tree') => {
-    setView(v)
-    try { localStorage.setItem('tessera.sitesView', v) } catch { /* storage unavailable */ }
-  }
   const backfill = useBackfillHierarchy()
   // One-off cleanup: only offer it while some top-level site still has country/state text but no place above it
   const needsTidy = (allSites ?? []).some((s) =>
@@ -682,131 +743,6 @@ export default function SitesPage() {
     }
   }
 
-  const columns = [
-    {
-      title: 'Name',
-      dataIndex: 'name',
-      key: 'name',
-      render: (v: string, record: Site) => (
-        <Button type="link" style={{ padding: 0, fontWeight: 500 }} onClick={() => setSelectedSite(record)}>
-          {v}
-        </Button>
-      ),
-    },
-    {
-      title: 'Level',
-      dataIndex: 'level',
-      key: 'level',
-      width: 100,
-      render: (v: string) => v ? <Tag>{v}</Tag> : <span style={{ color: '#bbb' }}>—</span>,
-    },
-    {
-      title: 'Specimens',
-      key: 'total_specimens',
-      width: 100,
-      align: 'right' as const,
-      render: (_: unknown, r: SiteNode) => r.total_specimens || <span style={{ color: '#bbb' }}>0</span>,
-    },
-    {
-      title: 'Projects',
-      key: 'projects',
-      render: (_: unknown, r: Site) =>
-        r.projects?.length
-          ? <Space size={4} wrap>{r.projects.map((p) => <Tag key={p.id} color="blue">{p.code}</Tag>)}</Space>
-          : <span style={{ color: '#bbb' }}>—</span>,
-    },
-    {
-      title: 'geo_loc_name',
-      key: 'geo_loc_name',
-      render: (_: unknown, r: Site) => {
-        const parts = [r.country, r.state_province, r.name].filter(Boolean)
-        return parts.length > 1
-          ? <Typography.Text code style={{ fontSize: 12 }}>{parts.join(':')}</Typography.Text>
-          : <span style={{ color: '#bbb' }}>—</span>
-      },
-    },
-    {
-      title: 'Precision',
-      dataIndex: 'precision',
-      key: 'precision',
-      width: 110,
-      render: (v: string) => v
-        ? <Tag color={PRECISION_COLORS[v] || 'default'}>{v}</Tag>
-        : <span style={{ color: '#bbb' }}>—</span>,
-    },
-    {
-      title: 'Habitat',
-      dataIndex: 'habitat_type',
-      key: 'habitat_type',
-      render: (v: string) => v ? <Tag>{v}</Tag> : '—',
-    },
-    {
-      title: 'Coordinates',
-      key: 'coords',
-      render: (_: unknown, r: Site) => r.lat != null ? (
-        <Space size={4}>
-          <span style={{ fontVariantNumeric: 'tabular-nums', fontSize: 13, whiteSpace: 'nowrap' }}>{r.lat}, {r.lon}</span>
-          <Button
-            type="text"
-            size="small"
-            icon={<CopyOutlined />}
-            style={{ color: '#aaa', padding: '0 2px' }}
-            onClick={(e) => {
-              e.stopPropagation()
-              navigator.clipboard.writeText(`${r.lat}, ${r.lon}`)
-              message.success('Copied to clipboard')
-            }}
-          />
-        </Space>
-      ) : '—',
-    },
-    {
-      title: 'Description',
-      dataIndex: 'description',
-      key: 'description',
-      ellipsis: true,
-      render: (v: string) => v || '—',
-    },
-    {
-      title: '',
-      key: 'actions',
-      width: 140,
-      render: (_: unknown, record: Site) => (
-        <Space>
-          <Button
-            icon={<PlusOutlined />}
-            size="small"
-            title="Add sub-site"
-            onClick={(e) => { e.stopPropagation(); setNewParentId(record.id); setCreateOpen(true) }}
-          />
-          <Button icon={<EditOutlined />} size="small" onClick={(e) => { e.stopPropagation(); setEditingSite(record) }} />
-          {user?.is_admin && (
-            <Button
-              icon={<MergeCellsOutlined />}
-              size="small"
-              title="Merge into another site"
-              onClick={(e) => { e.stopPropagation(); setMergingSite(record); setMergeTarget(undefined) }}
-            />
-          )}
-          {user?.is_admin && (
-            <Popconfirm
-              title="Delete this site?"
-              description="Any sub-sites move up one level."
-              onConfirm={() =>
-                deleteSite
-                  .mutateAsync(record.id)
-                  .then(() => message.success('Deleted'))
-                  .catch(() => message.error('Failed to delete'))
-              }
-            >
-              <Button icon={<DeleteOutlined />} size="small" danger onClick={(e) => e.stopPropagation()} />
-            </Popconfirm>
-          )}
-        </Space>
-      ),
-    },
-  ]
-
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
@@ -842,21 +778,8 @@ export default function SitesPage() {
           onChange={(v) => setProjectFilter(v)}
           options={projects?.map((p) => ({ value: p.id, label: `${p.code} — ${p.name}` }))}
         />
-        <Segmented
-          value={view}
-          onChange={(v) => changeView(v as 'table' | 'tree')}
-          options={[
-            { value: 'table', icon: <TableOutlined />, label: 'Table' },
-            { value: 'tree', icon: <ApartmentOutlined />, label: 'Tree' },
-          ]}
-        />
-        {view === 'table' && (
-          <Typography.Text type="secondary" style={{ fontSize: 13 }}>
-            Click a site name to view its location and tubes.
-          </Typography.Text>
-        )}
       </div>
-      {view === 'tree' ? (
+      <Spin spinning={isLoading}>
         <SiteTreeView
           tree={tree}
           sites={sites ?? []}
@@ -864,16 +787,7 @@ export default function SitesPage() {
           onSelect={setSelectedSite}
           onAddChild={(p) => { setNewParentId(p.id); setCreateOpen(true) }}
         />
-      ) : (
-      <Table
-        dataSource={tree}
-        columns={columns}
-        rowKey="id"
-        loading={isLoading}
-        expandable={{ childrenColumnName: 'children' }}
-        pagination={{ pageSize: 50, hideOnSinglePage: true }}
-      />
-      )}
+      </Spin>
 
       <Modal
         title="Build hierarchy from country / state"
@@ -922,12 +836,14 @@ export default function SitesPage() {
 
       <Modal
         title={newParentId != null ? `Add a site under ${(allSites ?? []).find((x) => x.id === newParentId)?.path ?? '…'}` : 'Add a site'}
+        zIndex={1100}
         open={createOpen} onCancel={() => { setCreateOpen(false); setNewParentId(undefined) }} footer={null} width={520} destroyOnClose>
         <SiteForm onFinish={handleCreate} loading={createSite.isPending} defaultParentId={newParentId} />
       </Modal>
 
       <Modal
         title={`Merge "${mergingSite?.path}"`}
+        zIndex={1100}
         open={!!mergingSite}
         onCancel={() => setMergingSite(null)}
         onOk={handleMerge}
@@ -954,6 +870,7 @@ export default function SitesPage() {
 
       <Modal
         title={`Edit — ${editingSite?.name}`}
+        zIndex={1100}
         open={!!editingSite}
         onCancel={() => setEditingSite(null)}
         footer={null}
@@ -971,7 +888,22 @@ export default function SitesPage() {
       </Modal>
 
       {selectedSite && (
-        <SiteSpecimensDrawer site={selectedSite} sites={allSites ?? []} onClose={() => setSelectedSite(null)} />
+        <SiteDrawer
+          // use the freshest copy so edits show up without reopening
+          site={allSites?.find((x) => x.id === selectedSite.id) ?? selectedSite}
+          sites={allSites ?? []}
+          isAdmin={!!user?.is_admin}
+          onClose={() => setSelectedSite(null)}
+          onEdit={setEditingSite}
+          onAddChild={(p) => { setNewParentId(p.id); setCreateOpen(true) }}
+          onMerge={(x) => { setMergingSite(x); setMergeTarget(undefined) }}
+          onDelete={(x) =>
+            deleteSite
+              .mutateAsync(x.id)
+              .then(() => { message.success('Deleted'); setSelectedSite(null) })
+              .catch((e: { response?: { data?: { detail?: string } } }) => message.error(e.response?.data?.detail || 'Failed to delete'))
+          }
+        />
       )}
     </div>
   )

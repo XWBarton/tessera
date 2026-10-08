@@ -115,6 +115,7 @@ export default function BoundaryEditor({ open, value, lat, lon, radiusM, onCance
   return (
     <Modal
       title="Site boundary"
+      zIndex={1200}
       open={open}
       onCancel={onCancel}
       width={820}
