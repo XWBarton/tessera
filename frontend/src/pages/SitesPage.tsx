@@ -1,11 +1,12 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Typography, Table, Button, Modal, Form, Input, InputNumber, Space, message, Popconfirm, Tag, Select, Drawer, Spin, Tabs, TreeSelect, AutoComplete, Alert } from 'antd'
-import { PlusOutlined, DeleteOutlined, EditOutlined, CopyOutlined, MergeCellsOutlined } from '@ant-design/icons'
+import { Typography, Table, Button, Modal, Form, Input, InputNumber, Space, message, Popconfirm, Tag, Select, Drawer, Spin, Tabs, TreeSelect, AutoComplete, Alert, Tree, Segmented } from 'antd'
+import { PlusOutlined, DeleteOutlined, EditOutlined, CopyOutlined, MergeCellsOutlined, TableOutlined, ApartmentOutlined } from '@ant-design/icons'
 import { MapContainer, TileLayer, LayersControl, CircleMarker, Circle, useMap } from 'react-leaflet'
-import { useSites, useCreateSite, useUpdateSite, useDeleteSite, useSiteSpecimens, useSiteCounts, useSiteDuplicates, useMergeSite } from '../hooks/useSites'
+import { useSites, useCreateSite, useUpdateSite, useDeleteSite, useSiteSpecimens, useSiteCounts, useSiteDuplicates, useMergeSite, useMoveSite } from '../hooks/useSites'
 import { buildSiteTree, subtreeIds, effectiveLocation, SITE_LEVEL_SUGGESTIONS } from '../utils/siteTree'
 import type { SiteNode } from '../utils/siteTree'
+import type { TreeProps } from 'antd'
 import { useProjects } from '../hooks/useProjects'
 import { useAuth } from '../context/AuthContext'
 import type { Site, Specimen } from '../types'
@@ -187,6 +188,107 @@ function SiteForm({ onFinish, loading, initialValues, editingId, defaultParentId
   )
 }
 
+function filterTree(nodes: SiteNode[], q: string): SiteNode[] {
+  const out: SiteNode[] = []
+  for (const n of nodes) {
+    const kids = n.children ? filterTree(n.children, q) : []
+    if (n.name.toLowerCase().includes(q) || kids.length) out.push({ ...n, children: kids.length ? kids : undefined })
+  }
+  return out
+}
+
+function collectKeys(nodes: SiteNode[]): number[] {
+  return nodes.flatMap((n) => (n.children?.length ? [n.id, ...collectKeys(n.children)] : []))
+}
+
+function SiteTreeView({ tree, sites, canEdit, onSelect }: {
+  tree: SiteNode[]
+  sites: Site[]
+  canEdit: boolean
+  onSelect: (site: Site) => void
+}) {
+  const [search, setSearch] = useState('')
+  const [expanded, setExpanded] = useState<React.Key[]>([])
+  const moveSite = useMoveSite()
+  const q = search.trim().toLowerCase()
+  const visible = useMemo(() => (q ? filterTree(tree, q) : tree), [tree, q])
+  // Expand everything while searching so matches are visible
+  const expandedKeys = q ? collectKeys(visible) : expanded
+  const byId = useMemo(() => new Map(sites.map((s) => [s.id, s])), [sites])
+
+  const toData = (nodes: SiteNode[]): NonNullable<TreeProps['treeData']> =>
+    nodes.map((n) => ({
+      key: n.id,
+      title: (
+        <span>
+          <span style={{ fontWeight: n.children?.length ? 600 : 400 }}>{n.name}</span>
+          {n.level && <Tag style={{ marginLeft: 8 }}>{n.level}</Tag>}
+          {n.radius_m ? <Typography.Text type="secondary" style={{ marginLeft: 6, fontSize: 12 }}>
+            ~{n.radius_m >= 1000 ? `${(n.radius_m / 1000).toFixed(1)} km` : `${n.radius_m} m`}
+          </Typography.Text> : null}
+          <Typography.Text type="secondary" style={{ marginLeft: 8, fontSize: 12 }}>
+            {n.total_specimens} specimen{n.total_specimens !== 1 ? 's' : ''}
+          </Typography.Text>
+        </span>
+      ),
+      children: n.children ? toData(n.children) : undefined,
+    }))
+
+  const handleDrop: TreeProps['onDrop'] = (info) => {
+    const dragged = byId.get(Number(info.dragNode.key))
+    const target = byId.get(Number(info.node.key))
+    if (!dragged || !target) return
+    // Dropped onto a node -> becomes its child; dropped in a gap -> becomes its sibling
+    const newParentId = info.dropToGap ? (target.parent_id ?? null) : target.id
+    if ((dragged.parent_id ?? null) === newParentId) return
+    const destination = newParentId == null ? 'the top level' : byId.get(newParentId)?.path
+    Modal.confirm({
+      title: `Move "${dragged.name}"?`,
+      content: `It will be placed under ${destination}.`,
+      okText: 'Move',
+      onOk: () =>
+        moveSite.mutateAsync({ id: dragged.id, parentId: newParentId })
+          .then(() => message.success('Site moved'))
+          .catch((e: { response?: { data?: { detail?: string } } }) => {
+            message.error(e.response?.data?.detail || 'Failed to move site')
+          }),
+    })
+  }
+
+  return (
+    <div>
+      <Space style={{ marginBottom: 12 }} wrap>
+        <Input.Search
+          allowClear
+          placeholder="Search sites"
+          style={{ width: 240 }}
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <Button size="small" onClick={() => setExpanded(collectKeys(tree))}>Expand all</Button>
+        <Button size="small" onClick={() => setExpanded([])}>Collapse all</Button>
+        <Typography.Text type="secondary" style={{ fontSize: 13 }}>
+          {canEdit ? 'Click a site to open it. Drag one onto another to make it a sub-site.' : 'Click a site to open it.'}
+        </Typography.Text>
+      </Space>
+      <Tree
+        showLine
+        blockNode
+        draggable={canEdit && !q}
+        treeData={toData(visible)}
+        expandedKeys={expandedKeys}
+        onExpand={(keys) => !q && setExpanded(keys)}
+        onSelect={(keys) => {
+          const site = keys.length ? byId.get(Number(keys[0])) : undefined
+          if (site) onSelect(site)
+        }}
+        selectedKeys={[]}
+        onDrop={handleDrop}
+      />
+    </div>
+  )
+}
+
 function InvalidateSize() {
   const map = useMap()
   useEffect(() => {
@@ -344,6 +446,13 @@ export default function SitesPage() {
   const { data: counts } = useSiteCounts()
   const { data: allSites } = useSites()
   const mergeSite = useMergeSite()
+  const [view, setView] = useState<'table' | 'tree'>(() => {
+    try { return localStorage.getItem('tessera.sitesView') === 'tree' ? 'tree' : 'table' } catch { return 'table' }
+  })
+  const changeView = (v: 'table' | 'tree') => {
+    setView(v)
+    try { localStorage.setItem('tessera.sitesView', v) } catch { /* storage unavailable */ }
+  }
   const [mergingSite, setMergingSite] = useState<Site | null>(null)
   const [mergeTarget, setMergeTarget] = useState<number | undefined>(undefined)
   const [newParentId, setNewParentId] = useState<number | undefined>(undefined)
@@ -533,10 +642,23 @@ export default function SitesPage() {
           onChange={(v) => setProjectFilter(v)}
           options={projects?.map((p) => ({ value: p.id, label: `${p.code} — ${p.name}` }))}
         />
-        <Typography.Text type="secondary" style={{ fontSize: 13 }}>
-          Click a site name to view its location and tubes.
-        </Typography.Text>
+        <Segmented
+          value={view}
+          onChange={(v) => changeView(v as 'table' | 'tree')}
+          options={[
+            { value: 'table', icon: <TableOutlined />, label: 'Table' },
+            { value: 'tree', icon: <ApartmentOutlined />, label: 'Tree' },
+          ]}
+        />
+        {view === 'table' && (
+          <Typography.Text type="secondary" style={{ fontSize: 13 }}>
+            Click a site name to view its location and tubes.
+          </Typography.Text>
+        )}
       </div>
+      {view === 'tree' ? (
+        <SiteTreeView tree={tree} sites={sites ?? []} canEdit={!!user} onSelect={setSelectedSite} />
+      ) : (
       <Table
         dataSource={tree}
         columns={columns}
@@ -545,6 +667,7 @@ export default function SitesPage() {
         expandable={{ childrenColumnName: 'children' }}
         pagination={{ pageSize: 50, hideOnSinglePage: true }}
       />
+      )}
 
       <Modal title="Add Site" open={createOpen} onCancel={() => { setCreateOpen(false); setNewParentId(undefined) }} footer={null} width={520} destroyOnClose>
         <SiteForm onFinish={handleCreate} loading={createSite.isPending} defaultParentId={newParentId} />

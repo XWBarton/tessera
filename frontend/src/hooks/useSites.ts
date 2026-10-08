@@ -63,3 +63,11 @@ export const useMergeSite = () => {
     },
   })
 }
+
+export const useMoveSite = () => {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, parentId }: { id: number; parentId: number | null }) => updateSite(id, { parent_id: parentId }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['sites'] }),
+  })
+}
