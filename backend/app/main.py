@@ -45,6 +45,9 @@ def run_migrations():
             ("sites", "precision", "TEXT", None),
             ("sites", "country", "TEXT", None),
             ("sites", "state_province", "TEXT", None),
+            ("sites", "parent_id", "INTEGER REFERENCES sites(id)", None),
+            ("sites", "level", "TEXT", None),
+            ("sites", "radius_m", "REAL", None),
             ("tube_usage_log", "non_destructive", "INTEGER DEFAULT 0", None),
             ("tube_usage_log", "destination_tube", "TEXT", None),
             ("sample_types", "is_specimen", "INTEGER DEFAULT 0",
@@ -71,6 +74,18 @@ def run_migrations():
                     conn.execute(text(backfill))
                 conn.commit()
                 print(f"[tessera] Migration: added {table}.{column}")
+
+        # --- Sites: names unique per parent rather than globally ---
+        for idx in conn.execute(text("PRAGMA index_list(sites)")).fetchall():
+            # idx = (seq, name, unique, origin, partial)
+            if idx[1] == "ix_sites_name" and idx[2]:
+                conn.execute(text("DROP INDEX ix_sites_name"))
+                conn.execute(text("CREATE INDEX ix_sites_name ON sites (name)"))
+                print("[tessera] Migration: sites.name no longer globally unique")
+        conn.execute(text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_sites_parent_name ON sites (COALESCE(parent_id, 0), name)"
+        ))
+        conn.commit()
 
         # --- Rename/remove old default sample types ---
         # Rename "Voucher Specimens" → "Specimen" if it still exists

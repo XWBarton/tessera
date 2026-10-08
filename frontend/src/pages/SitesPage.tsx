@@ -1,9 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Typography, Table, Button, Modal, Form, Input, InputNumber, Space, message, Popconfirm, Tag, Select, Drawer, Spin, Tabs } from 'antd'
-import { PlusOutlined, DeleteOutlined, EditOutlined, CopyOutlined } from '@ant-design/icons'
+import { Typography, Table, Button, Modal, Form, Input, InputNumber, Space, message, Popconfirm, Tag, Select, Drawer, Spin, Tabs, TreeSelect, AutoComplete, Alert } from 'antd'
+import { PlusOutlined, DeleteOutlined, EditOutlined, CopyOutlined, MergeCellsOutlined } from '@ant-design/icons'
 import { MapContainer, TileLayer, LayersControl, CircleMarker, Circle, useMap } from 'react-leaflet'
-import { useSites, useCreateSite, useUpdateSite, useDeleteSite, useSiteSpecimens } from '../hooks/useSites'
+import { useSites, useCreateSite, useUpdateSite, useDeleteSite, useSiteSpecimens, useSiteCounts, useSiteDuplicates, useMergeSite } from '../hooks/useSites'
+import { buildSiteTree, subtreeIds, effectiveLocation, SITE_LEVEL_SUGGESTIONS } from '../utils/siteTree'
+import type { SiteNode } from '../utils/siteTree'
 import { useProjects } from '../hooks/useProjects'
 import { useAuth } from '../context/AuthContext'
 import type { Site, Specimen } from '../types'
@@ -40,18 +42,80 @@ const PRECISION_ZOOM: Record<string, number> = {
   State: 6,
 }
 
-function SiteForm({ onFinish, loading, initialValues }: {
+const REASON_TEXT: Record<string, string> = { name: 'similar name', nearby: 'overlapping / very close location' }
+
+function SiteForm({ onFinish, loading, initialValues, editingId, defaultParentId }: {
   onFinish: (values: Record<string, unknown>) => void
   loading: boolean
   initialValues?: Partial<Site> & { project_ids?: number[] }
+  editingId?: number
+  defaultParentId?: number
 }) {
   const [form] = Form.useForm()
   const { data: projects } = useProjects()
+  const { data: allSites } = useSites()
+
+  const name = Form.useWatch('name', form) as string | undefined
+  const parentId = Form.useWatch('parent_id', form) as number | null | undefined
+  const lat = Form.useWatch('lat', form) as number | null | undefined
+  const lon = Form.useWatch('lon', form) as number | null | undefined
+  const radius = Form.useWatch('radius_m', form) as number | null | undefined
+
+  // Debounce so we don't hit the API on every keystroke
+  const [debounced, setDebounced] = useState({ name, parentId, lat, lon, radius })
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced({ name, parentId, lat, lon, radius }), 400)
+    return () => clearTimeout(t)
+  }, [name, parentId, lat, lon, radius])
+
+  const hasCoords = debounced.lat != null && debounced.lon != null
+  const { data: matches } = useSiteDuplicates(
+    {
+      name: debounced.name,
+      parent_id: debounced.parentId ?? null,
+      lat: debounced.lat ?? null,
+      lon: debounced.lon ?? null,
+      radius_m: debounced.radius ?? null,
+      exclude_id: editingId,
+    },
+    (debounced.name?.trim().length ?? 0) >= 3 || hasCoords,
+  )
+
+  const parentTree = useMemo(() => {
+    const excluded = editingId != null && allSites ? subtreeIds(allSites, editingId) : new Set<number>()
+    type TreeOpt = { value: number; title: string; children?: TreeOpt[] }
+    const toTreeData = (nodes: SiteNode[]): TreeOpt[] =>
+      nodes
+        .filter((n) => !excluded.has(n.id))
+        .map((n) => ({
+          value: n.id,
+          title: n.level ? `${n.name} (${n.level})` : n.name,
+          children: n.children ? toTreeData(n.children) : undefined,
+        }))
+    return toTreeData(buildSiteTree(allSites ?? []))
+  }, [allSites, editingId])
 
   return (
-    <Form form={form} layout="vertical" onFinish={onFinish} initialValues={initialValues}>
+    <Form form={form} layout="vertical" onFinish={onFinish} initialValues={{ parent_id: defaultParentId, ...initialValues }}>
+      <Form.Item name="parent_id" label="Parent Site" help="Place this inside a broader site, e.g. Jemmys Point under Lakes Entrance. Leave empty for a top-level site.">
+        <TreeSelect
+          allowClear
+          showSearch
+          treeDefaultExpandAll
+          treeNodeFilterProp="title"
+          placeholder="None (top-level)"
+          treeData={parentTree}
+        />
+      </Form.Item>
       <Form.Item name="name" label="Site Name" rules={[{ required: true }]}>
         <Input placeholder="e.g. Wetlands Reserve North" />
+      </Form.Item>
+      <Form.Item name="level" label="Level" help="Optional label for this tier of the hierarchy">
+        <AutoComplete
+          allowClear
+          placeholder="e.g. Town, Locality"
+          options={SITE_LEVEL_SUGGESTIONS.map((v) => ({ value: v }))}
+        />
       </Form.Item>
       <Form.Item name="country" label="Country" help="MIxS geo_loc_name level 1">
         <Input placeholder="e.g. Australia" />
@@ -86,12 +150,37 @@ function SiteForm({ onFinish, loading, initialValues }: {
           </Form.Item>
         </Space.Compact>
       </Form.Item>
+      <Form.Item name="radius_m" label="Radius (metres)" help="How far the site extends from the point. Used to draw the area and to detect overlapping sites.">
+        <InputNumber style={{ width: '100%' }} min={0} step={50} placeholder="e.g. 150" />
+      </Form.Item>
       <Form.Item name="notes" label="Notes">
         <Input.TextArea rows={2} />
       </Form.Item>
+      {matches && matches.length > 0 && (
+        <Alert
+          type="warning"
+          showIcon
+          style={{ marginBottom: 16 }}
+          message={editingId ? 'This site looks similar to existing sites' : 'Similar sites already exist: is this a duplicate?'}
+          description={
+            <ul style={{ margin: 0, paddingLeft: 18 }}>
+              {matches.map((m) => (
+                <li key={m.site.id}>
+                  <strong>{m.site.path}</strong>
+                  {' — '}
+                  {m.reasons.map((r) => REASON_TEXT[r]).join(', ')}
+                  {m.distance_m != null && m.reasons.includes('nearby') && ` (${Math.round(m.distance_m)} m away)`}
+                </li>
+              ))}
+            </ul>
+          }
+        />
+      )}
       <Form.Item>
         <Space>
-          <Button type="primary" htmlType="submit" loading={loading}>Save</Button>
+          <Button type="primary" htmlType="submit" loading={loading}>
+            {!editingId && matches && matches.length > 0 ? 'Create anyway' : 'Save'}
+          </Button>
         </Space>
       </Form.Item>
     </Form>
@@ -107,11 +196,14 @@ function InvalidateSize() {
   return null
 }
 
-function SiteMap({ site }: { site: Site }) {
+function SiteMap({ site, loc }: { site: Site; loc: NonNullable<ReturnType<typeof effectiveLocation>> }) {
   const precision = site.precision || 'GPS'
-  const radiusM = PRECISION_RADIUS_M[precision]
-  const pos: [number, number] = [site.lat!, site.lon!]
-  const zoom = PRECISION_ZOOM[precision] ?? 10
+  const inherited = !!loc.inheritedFrom
+  const radiusM = loc.radius_m || (inherited ? undefined : PRECISION_RADIUS_M[precision])
+  const pos: [number, number] = [loc.lat, loc.lon]
+  const zoom = loc.radius_m
+    ? Math.max(5, Math.min(17, Math.round(16 - Math.log2(Math.max(loc.radius_m, 50) / 100))))
+    : PRECISION_ZOOM[precision] ?? 10
 
   return (
     <div>
@@ -150,7 +242,15 @@ function SiteMap({ site }: { site: Site }) {
           />
         )}
       </MapContainer>
-      {precision !== 'GPS' && (
+      {inherited ? (
+        <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 6 }}>
+          No coordinates of its own, showing the location of {loc.inheritedFrom!.name}
+        </Typography.Text>
+      ) : loc.radius_m ? (
+        <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 6 }}>
+          Site extends about {loc.radius_m >= 1000 ? `${(loc.radius_m / 1000).toFixed(1)} km` : `${loc.radius_m} m`} from this point
+        </Typography.Text>
+      ) : precision !== 'GPS' && (
         <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 6 }}>
           Location shown at {precision.toLowerCase()}-level precision
         </Typography.Text>
@@ -159,10 +259,12 @@ function SiteMap({ site }: { site: Site }) {
   )
 }
 
-function SiteSpecimensDrawer({ site, onClose }: { site: Site; onClose: () => void }) {
+function SiteSpecimensDrawer({ site, sites, onClose }: { site: Site; sites: Site[]; onClose: () => void }) {
   const navigate = useNavigate()
   const { data: specimens, isLoading } = useSiteSpecimens(site.id)
-  const hasCoords = site.lat != null && site.lon != null
+  const loc = effectiveLocation(site, sites)
+  const hasCoords = loc !== null
+  const hasChildren = sites.some((s) => s.parent_id === site.id)
 
   const specimenColumns = [
     {
@@ -191,7 +293,7 @@ function SiteSpecimensDrawer({ site, onClose }: { site: Site; onClose: () => voi
   const specimenTab = isLoading ? <Spin /> : (
     <>
       <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
-        {specimens?.length ?? 0} tube{specimens?.length !== 1 ? 's' : ''} collected at this site
+        {specimens?.length ?? 0} tube{specimens?.length !== 1 ? 's' : ''} collected at this site{hasChildren ? ' or its sub-sites' : ''}
       </Typography.Text>
       <Table
         dataSource={specimens}
@@ -207,7 +309,7 @@ function SiteSpecimensDrawer({ site, onClose }: { site: Site; onClose: () => voi
     ...(hasCoords ? [{
       key: 'map',
       label: 'Map',
-      children: <SiteMap site={site} />,
+      children: <SiteMap site={site} loc={loc!} />,
     }] : []),
     {
       key: 'specimens',
@@ -220,7 +322,7 @@ function SiteSpecimensDrawer({ site, onClose }: { site: Site; onClose: () => voi
     <Drawer
       title={
         <span>
-          {site.name}
+          {site.path}
           {site.habitat_type && <Tag style={{ marginLeft: 8 }}>{site.habitat_type}</Tag>}
           {site.precision && <Tag color={PRECISION_COLORS[site.precision] || 'default'} style={{ marginLeft: 4 }}>{site.precision}</Tag>}
         </span>
@@ -239,6 +341,13 @@ export default function SitesPage() {
   const [projectFilter, setProjectFilter] = useState<number | undefined>(undefined)
   const { data: sites, isLoading } = useSites(projectFilter ? { project_id: projectFilter } : undefined)
   const { data: projects } = useProjects()
+  const { data: counts } = useSiteCounts()
+  const { data: allSites } = useSites()
+  const mergeSite = useMergeSite()
+  const [mergingSite, setMergingSite] = useState<Site | null>(null)
+  const [mergeTarget, setMergeTarget] = useState<number | undefined>(undefined)
+  const [newParentId, setNewParentId] = useState<number | undefined>(undefined)
+  const tree = useMemo(() => buildSiteTree(sites ?? [], counts), [sites, counts])
   const createSite = useCreateSite()
   const deleteSite = useDeleteSite()
   const [createOpen, setCreateOpen] = useState(false)
@@ -251,6 +360,7 @@ export default function SitesPage() {
       await createSite.mutateAsync(values as never)
       message.success('Site added')
       setCreateOpen(false)
+      setNewParentId(undefined)
     } catch (e: unknown) {
       const err = e as { response?: { data?: { detail?: string } } }
       message.error(err.response?.data?.detail || 'Failed to add site')
@@ -262,8 +372,22 @@ export default function SitesPage() {
       await updateSite.mutateAsync(values as never)
       message.success('Site updated')
       setEditingSite(null)
-    } catch {
-      message.error('Failed to update site')
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { detail?: string } } }
+      message.error(err.response?.data?.detail || 'Failed to update site')
+    }
+  }
+
+  const handleMerge = async () => {
+    if (!mergingSite || !mergeTarget) return
+    try {
+      await mergeSite.mutateAsync({ id: mergingSite.id, targetId: mergeTarget })
+      message.success(`Merged "${mergingSite.name}" into the selected site`)
+      setMergingSite(null)
+      setMergeTarget(undefined)
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { detail?: string } } }
+      message.error(err.response?.data?.detail || 'Merge failed')
     }
   }
 
@@ -277,6 +401,20 @@ export default function SitesPage() {
           {v}
         </Button>
       ),
+    },
+    {
+      title: 'Level',
+      dataIndex: 'level',
+      key: 'level',
+      width: 100,
+      render: (v: string) => v ? <Tag>{v}</Tag> : <span style={{ color: '#bbb' }}>—</span>,
+    },
+    {
+      title: 'Specimens',
+      key: 'total_specimens',
+      width: 100,
+      align: 'right' as const,
+      render: (_: unknown, r: SiteNode) => r.total_specimens || <span style={{ color: '#bbb' }}>0</span>,
     },
     {
       title: 'Projects',
@@ -341,13 +479,28 @@ export default function SitesPage() {
     {
       title: '',
       key: 'actions',
-      width: 100,
+      width: 140,
       render: (_: unknown, record: Site) => (
         <Space>
+          <Button
+            icon={<PlusOutlined />}
+            size="small"
+            title="Add sub-site"
+            onClick={(e) => { e.stopPropagation(); setNewParentId(record.id); setCreateOpen(true) }}
+          />
           <Button icon={<EditOutlined />} size="small" onClick={(e) => { e.stopPropagation(); setEditingSite(record) }} />
+          {user?.is_admin && (
+            <Button
+              icon={<MergeCellsOutlined />}
+              size="small"
+              title="Merge into another site"
+              onClick={(e) => { e.stopPropagation(); setMergingSite(record); setMergeTarget(undefined) }}
+            />
+          )}
           {user?.is_admin && (
             <Popconfirm
               title="Delete this site?"
+              description="Any sub-sites move up one level."
               onConfirm={() =>
                 deleteSite
                   .mutateAsync(record.id)
@@ -384,10 +537,43 @@ export default function SitesPage() {
           Click a site name to view its location and tubes.
         </Typography.Text>
       </div>
-      <Table dataSource={sites} columns={columns} rowKey="id" loading={isLoading} />
+      <Table
+        dataSource={tree}
+        columns={columns}
+        rowKey="id"
+        loading={isLoading}
+        expandable={{ childrenColumnName: 'children' }}
+        pagination={{ pageSize: 50, hideOnSinglePage: true }}
+      />
 
-      <Modal title="Add Site" open={createOpen} onCancel={() => setCreateOpen(false)} footer={null} width={520} destroyOnClose>
-        <SiteForm onFinish={handleCreate} loading={createSite.isPending} />
+      <Modal title="Add Site" open={createOpen} onCancel={() => { setCreateOpen(false); setNewParentId(undefined) }} footer={null} width={520} destroyOnClose>
+        <SiteForm onFinish={handleCreate} loading={createSite.isPending} defaultParentId={newParentId} />
+      </Modal>
+
+      <Modal
+        title={`Merge "${mergingSite?.path}"`}
+        open={!!mergingSite}
+        onCancel={() => setMergingSite(null)}
+        onOk={handleMerge}
+        okText="Merge"
+        okButtonProps={{ disabled: !mergeTarget, danger: true, loading: mergeSite.isPending }}
+        destroyOnClose
+      >
+        <Typography.Paragraph type="secondary">
+          Use this when two entries are the same place. All specimens, sub-sites and project tags move to the site you pick, and this site is deleted. Blank fields on the target are filled from this site.
+        </Typography.Paragraph>
+        <Select
+          showSearch
+          style={{ width: '100%' }}
+          placeholder="Merge into…"
+          value={mergeTarget}
+          onChange={setMergeTarget}
+          optionFilterProp="label"
+          options={(allSites ?? [])
+            .filter((s) => mergingSite && !subtreeIds(allSites ?? [], mergingSite.id).has(s.id))
+            .sort((a, b) => a.path.localeCompare(b.path))
+            .map((s) => ({ value: s.id, label: s.path }))}
+        />
       </Modal>
 
       <Modal
@@ -400,6 +586,7 @@ export default function SitesPage() {
         {editingSite && (
           <SiteForm
             key={editingSite.id}
+            editingId={editingSite.id}
             onFinish={handleEdit}
             loading={updateSite.isPending}
             initialValues={{ ...editingSite, project_ids: editingSite.projects?.map((p) => p.id) ?? [] }}
@@ -408,7 +595,7 @@ export default function SitesPage() {
       </Modal>
 
       {selectedSite && (
-        <SiteSpecimensDrawer site={selectedSite} onClose={() => setSelectedSite(null)} />
+        <SiteSpecimensDrawer site={selectedSite} sites={allSites ?? []} onClose={() => setSelectedSite(null)} />
       )}
     </div>
   )

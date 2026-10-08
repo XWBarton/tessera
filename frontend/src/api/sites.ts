@@ -1,5 +1,5 @@
 import apiClient from './client'
-import type { Site, SiteCreate, SiteUpdate, Specimen } from '../types'
+import type { Site, SiteCreate, SiteUpdate, SiteDuplicateMatch, Specimen } from '../types'
 
 export const getSites = async (params?: { q?: string; project_id?: number }): Promise<Site[]> => {
   const { data } = await apiClient.get<Site[]>('/sites/', { params: params || {} })
@@ -41,7 +41,33 @@ export const bulkImportSites = async (rows: SiteBulkImportRow[]): Promise<SiteBu
   return data
 }
 
-export const getSiteSpecimens = async (siteId: number): Promise<Specimen[]> => {
-  const { data } = await apiClient.get<Specimen[]>(`/sites/${siteId}/specimens`)
+export const getSiteSpecimens = async (siteId: number, includeChildren = true): Promise<Specimen[]> => {
+  const { data } = await apiClient.get<Specimen[]>(`/sites/${siteId}/specimens`, {
+    params: { include_children: includeChildren },
+  })
+  return data
+}
+
+export const getSiteCounts = async (): Promise<Record<string, number>> => {
+  const { data } = await apiClient.get<Record<string, number>>('/sites/counts')
+  return data
+}
+
+export interface DuplicateCheckParams {
+  name?: string
+  parent_id?: number | null
+  lat?: number | null
+  lon?: number | null
+  radius_m?: number | null
+  exclude_id?: number
+}
+
+export const checkSiteDuplicates = async (params: DuplicateCheckParams): Promise<SiteDuplicateMatch[]> => {
+  const { data } = await apiClient.post<SiteDuplicateMatch[]>('/sites/check-duplicates', params)
+  return data
+}
+
+export const mergeSite = async (id: number, targetId: number): Promise<Site> => {
+  const { data } = await apiClient.post<Site>(`/sites/${id}/merge`, { target_id: targetId })
   return data
 }

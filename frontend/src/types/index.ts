@@ -77,8 +77,19 @@ export interface Site {
   lon?: number
   precision?: string
   notes?: string
+  parent_id?: number | null
+  level?: string | null
+  radius_m?: number | null
+  path: string
   created_at: string
   projects?: SiteProject[]
+}
+
+export interface SiteDuplicateMatch {
+  site: Site
+  reasons: ('name' | 'nearby')[]
+  distance_m?: number | null
+  same_parent: boolean
 }
 
 export interface SpecimenSpecies {
@@ -270,6 +281,11 @@ export interface TubeUsageLogCreate {
 }
 
 export interface SiteCreate {
+  country?: string
+  state_province?: string
+  parent_id?: number | null
+  level?: string | null
+  radius_m?: number | null
   name: string
   description?: string
   habitat_type?: string
@@ -281,6 +297,11 @@ export interface SiteCreate {
 }
 
 export interface SiteUpdate {
+  country?: string
+  state_province?: string
+  parent_id?: number | null
+  level?: string | null
+  radius_m?: number | null
   name?: string
   description?: string
   habitat_type?: string

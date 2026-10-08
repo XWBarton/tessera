@@ -498,7 +498,7 @@ export default function SpecimenFormPage() {
               }}
               options={filteredSites.map((s) => ({
                 value: s.id,
-                label: s.habitat_type ? `${s.name} (${s.habitat_type})` : s.name,
+                label: s.habitat_type ? `${s.path} (${s.habitat_type})` : s.path,
               }))}
             />
           </Form.Item>
