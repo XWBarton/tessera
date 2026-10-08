@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Typography, Table, Button, Modal, Form, Input, InputNumber, Space, message, Popconfirm, Tag, Select, Drawer, Spin, Tabs, TreeSelect, Alert, Tree, Dropdown, Collapse, Radio, Descriptions } from 'antd'
-import { PlusOutlined, DeleteOutlined, EditOutlined, CopyOutlined, MergeCellsOutlined, ClusterOutlined, DownloadOutlined, BorderOutlined } from '@ant-design/icons'
+import { PlusOutlined, DeleteOutlined, EditOutlined, CopyOutlined, MergeCellsOutlined, ClusterOutlined, FolderOutlined, FolderOpenOutlined, EnvironmentOutlined, DownloadOutlined, BorderOutlined } from '@ant-design/icons'
 import { MapContainer, TileLayer, LayersControl, CircleMarker, Circle, GeoJSON, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import { useSites, useCreateSite, useUpdateSite, useDeleteSite, useSiteSpecimens, useSiteCounts, useSiteDuplicates, useMergeSite, useMoveSite, useBackfillHierarchy } from '../hooks/useSites'
@@ -344,6 +344,9 @@ function SiteTreeView({ tree, sites, canEdit, onSelect, onAddChild }: {
   const toData = (nodes: SiteNode[]): NonNullable<TreeProps['treeData']> =>
     nodes.map((n) => ({
       key: n.id,
+      icon: n.children?.length
+        ? ({ expanded }: { expanded?: boolean }) => (expanded ? <FolderOpenOutlined /> : <FolderOutlined />)
+        : <EnvironmentOutlined style={{ color: '#8c8c8c' }} />,
       title: (
         <span>
           <span style={{ fontWeight: n.children?.length ? 600 : 400 }}>{n.name}</span>
@@ -408,6 +411,7 @@ function SiteTreeView({ tree, sites, canEdit, onSelect, onAddChild }: {
       </Space>
       <Tree
         showLine
+        showIcon
         blockNode
         draggable={canEdit && !q}
         treeData={toData(visible)}

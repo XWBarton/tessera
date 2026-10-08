@@ -16,7 +16,8 @@ export function buildSiteTree(sites: Site[], counts: Record<string, number> = {}
     else roots.push(n)
   })
   const sortAndSum = (list: SiteNode[]): number => {
-    list.sort((a, b) => a.name.localeCompare(b.name))
+    // Sites that contain other sites first (like folders in a file explorer), then plain sites, each A-Z
+    list.sort((a, b) => Number(!!b.children?.length) - Number(!!a.children?.length) || a.name.localeCompare(b.name))
     let sum = 0
     list.forEach((n) => {
       if (n.children) n.total_specimens += sortAndSum(n.children)
