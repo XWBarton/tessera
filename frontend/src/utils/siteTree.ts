@@ -62,4 +62,4 @@ export function effectiveLocation(
   return null
 }
 
-export const SITE_LEVEL_SUGGESTIONS = ['Country', 'State', 'Region', 'Town', 'Locality', 'Site', 'Microsite']
+export const SITE_LEVEL_SUGGESTIONS = ['Country', 'State', 'County', 'Region', 'Town', 'Locality', 'Site', 'Microsite']

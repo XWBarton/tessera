@@ -1,12 +1,13 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Typography, Table, Button, Modal, Form, Input, InputNumber, Space, message, Popconfirm, Tag, Select, Drawer, Spin, Tabs, TreeSelect, AutoComplete, Alert, Tree, Segmented } from 'antd'
-import { PlusOutlined, DeleteOutlined, EditOutlined, CopyOutlined, MergeCellsOutlined, TableOutlined, ApartmentOutlined } from '@ant-design/icons'
+import { PlusOutlined, DeleteOutlined, EditOutlined, CopyOutlined, MergeCellsOutlined, TableOutlined, ApartmentOutlined, ClusterOutlined } from '@ant-design/icons'
 import { MapContainer, TileLayer, LayersControl, CircleMarker, Circle, useMap } from 'react-leaflet'
-import { useSites, useCreateSite, useUpdateSite, useDeleteSite, useSiteSpecimens, useSiteCounts, useSiteDuplicates, useMergeSite, useMoveSite } from '../hooks/useSites'
+import { useSites, useCreateSite, useUpdateSite, useDeleteSite, useSiteSpecimens, useSiteCounts, useSiteDuplicates, useMergeSite, useMoveSite, useBackfillHierarchy } from '../hooks/useSites'
 import { buildSiteTree, subtreeIds, effectiveLocation, SITE_LEVEL_SUGGESTIONS } from '../utils/siteTree'
 import type { SiteNode } from '../utils/siteTree'
 import type { TreeProps } from 'antd'
+import type { HierarchyBackfillResult } from '../api/sites'
 import { useProjects } from '../hooks/useProjects'
 import { useAuth } from '../context/AuthContext'
 import type { Site, Specimen } from '../types'
@@ -118,10 +119,10 @@ function SiteForm({ onFinish, loading, initialValues, editingId, defaultParentId
           options={SITE_LEVEL_SUGGESTIONS.map((v) => ({ value: v }))}
         />
       </Form.Item>
-      <Form.Item name="country" label="Country" help="MIxS geo_loc_name level 1">
+      <Form.Item name="country" label="Country" help="MIxS geo_loc_name level 1. Filled in automatically when the site sits under a Country place.">
         <Input placeholder="e.g. Australia" />
       </Form.Item>
-      <Form.Item name="state_province" label="State / Province" help="MIxS geo_loc_name level 2">
+      <Form.Item name="state_province" label="State / Province" help="MIxS geo_loc_name level 2. Filled in automatically when the site sits under a State place.">
         <Input placeholder="e.g. Western Australia" />
       </Form.Item>
       <Form.Item name="project_ids" label="Associated Projects">
@@ -453,6 +454,32 @@ export default function SitesPage() {
     setView(v)
     try { localStorage.setItem('tessera.sitesView', v) } catch { /* storage unavailable */ }
   }
+  const backfill = useBackfillHierarchy()
+  // One-off cleanup: only offer it while some top-level site still has country/state text but no place above it
+  const needsTidy = (allSites ?? []).some((s) =>
+    s.parent_id == null &&
+    !!(s.country?.trim() || s.state_province?.trim()) &&
+    !['country', 'state', 'province', 'territory', 'state/province'].includes((s.level ?? '').trim().toLowerCase()),
+  )
+  const [tidyPlan, setTidyPlan] = useState<HierarchyBackfillResult | null>(null)
+  const openTidy = async () => {
+    try {
+      setTidyPlan(await backfill.mutateAsync(false))
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { detail?: string } } }
+      message.error(err.response?.data?.detail || 'Could not build a preview')
+    }
+  }
+  const applyTidy = async () => {
+    try {
+      const r = await backfill.mutateAsync(true)
+      message.success(`Created ${r.created.length} place${r.created.length !== 1 ? 's' : ''}, moved ${r.moved.length} site${r.moved.length !== 1 ? 's' : ''}`)
+      setTidyPlan(null)
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { detail?: string } } }
+      message.error(err.response?.data?.detail || 'Failed to apply')
+    }
+  }
   const [mergingSite, setMergingSite] = useState<Site | null>(null)
   const [mergeTarget, setMergeTarget] = useState<number | undefined>(undefined)
   const [newParentId, setNewParentId] = useState<number | undefined>(undefined)
@@ -629,9 +656,16 @@ export default function SitesPage() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <Typography.Title level={3} style={{ margin: 0 }}>Sites</Typography.Title>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
-          Add Site
-        </Button>
+        <Space>
+          {user?.is_admin && needsTidy && (
+            <Button icon={<ClusterOutlined />} onClick={openTidy} loading={backfill.isPending && !tidyPlan}>
+              Build hierarchy from country / state
+            </Button>
+          )}
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
+            Add Site
+          </Button>
+        </Space>
       </div>
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 12 }}>
         <Select
@@ -668,6 +702,51 @@ export default function SitesPage() {
         pagination={{ pageSize: 50, hideOnSinglePage: true }}
       />
       )}
+
+      <Modal
+        title="Build hierarchy from country / state"
+        open={!!tidyPlan}
+        onCancel={() => setTidyPlan(null)}
+        onOk={applyTidy}
+        okText="Apply changes"
+        okButtonProps={{ disabled: !tidyPlan || (tidyPlan.created.length === 0 && tidyPlan.moved.length === 0), loading: backfill.isPending }}
+        width={640}
+      >
+        {tidyPlan && (tidyPlan.created.length === 0 && tidyPlan.moved.length === 0 && tidyPlan.skipped.length === 0 ? (
+          <Typography.Paragraph>Nothing to do: every site with a country or state is already placed under one.</Typography.Paragraph>
+        ) : (
+          <div>
+            <Typography.Paragraph type="secondary">
+              Preview only, nothing has been changed yet. Sites at the top level that have a country or state/province
+              are moved under matching Country and State places, which are created if they don't exist.
+            </Typography.Paragraph>
+            {tidyPlan.created.length > 0 && (
+              <>
+                <Typography.Text strong>New places ({tidyPlan.created.length})</Typography.Text>
+                <ul style={{ maxHeight: 140, overflow: 'auto' }}>
+                  {tidyPlan.created.map((c) => <li key={c}>{c}</li>)}
+                </ul>
+              </>
+            )}
+            {tidyPlan.moved.length > 0 && (
+              <>
+                <Typography.Text strong>Sites to move ({tidyPlan.moved.length})</Typography.Text>
+                <ul style={{ maxHeight: 220, overflow: 'auto' }}>
+                  {tidyPlan.moved.map((m) => <li key={m.id}>{m.name} <Typography.Text type="secondary">→ {m.to}</Typography.Text></li>)}
+                </ul>
+              </>
+            )}
+            {tidyPlan.skipped.length > 0 && (
+              <Alert
+                type="warning"
+                showIcon
+                message={`${tidyPlan.skipped.length} site${tidyPlan.skipped.length !== 1 ? 's' : ''} left where ${tidyPlan.skipped.length !== 1 ? 'they are' : 'it is'}`}
+                description={<ul style={{ margin: 0, paddingLeft: 18 }}>{tidyPlan.skipped.map((k) => <li key={k.id}><strong>{k.name}</strong>: {k.reason}</li>)}</ul>}
+              />
+            )}
+          </div>
+        ))}
+      </Modal>
 
       <Modal title="Add Site" open={createOpen} onCancel={() => { setCreateOpen(false); setNewParentId(undefined) }} footer={null} width={520} destroyOnClose>
         <SiteForm onFinish={handleCreate} loading={createSite.isPending} defaultParentId={newParentId} />

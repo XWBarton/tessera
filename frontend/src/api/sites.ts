@@ -67,6 +67,18 @@ export const checkSiteDuplicates = async (params: DuplicateCheckParams): Promise
   return data
 }
 
+export interface HierarchyBackfillResult {
+  created: string[]
+  moved: { id: number; name: string; to: string }[]
+  skipped: { id: number; name: string; reason: string }[]
+  applied: boolean
+}
+
+export const backfillHierarchy = async (apply: boolean): Promise<HierarchyBackfillResult> => {
+  const { data } = await apiClient.post<HierarchyBackfillResult>('/sites/hierarchy-backfill', null, { params: { apply } })
+  return data
+}
+
 export const mergeSite = async (id: number, targetId: number): Promise<Site> => {
   const { data } = await apiClient.post<Site>(`/sites/${id}/merge`, { target_id: targetId })
   return data

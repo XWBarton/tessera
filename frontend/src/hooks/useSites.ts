@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { getSites, createSite, updateSite, deleteSite, getSiteSpecimens, getSiteCounts, checkSiteDuplicates, mergeSite } from '../api/sites'
+import { getSites, createSite, updateSite, deleteSite, getSiteSpecimens, getSiteCounts, checkSiteDuplicates, mergeSite, backfillHierarchy } from '../api/sites'
 import type { DuplicateCheckParams } from '../api/sites'
 import type { SiteCreate, SiteUpdate } from '../types'
 
@@ -60,6 +60,19 @@ export const useMergeSite = () => {
       qc.invalidateQueries({ queryKey: ['site-counts'] })
       qc.invalidateQueries({ queryKey: ['site-specimens'] })
       qc.invalidateQueries({ queryKey: ['specimens'] })
+    },
+  })
+}
+
+export const useBackfillHierarchy = () => {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (apply: boolean) => backfillHierarchy(apply),
+    onSuccess: (result) => {
+      if (result.applied) {
+        qc.invalidateQueries({ queryKey: ['sites'] })
+        qc.invalidateQueries({ queryKey: ['site-counts'] })
+      }
     },
   })
 }

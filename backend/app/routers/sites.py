@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.exc import IntegrityError
 from ..dependencies import get_db, get_current_user, require_admin
-from ..crud.site import get_site, search_sites, get_all_sites, create_site, update_site, delete_site, get_site_by_name, validate_parent, descendant_ids, find_similar_sites, specimen_counts, merge_sites
+from ..crud.site import get_site, search_sites, get_all_sites, create_site, update_site, delete_site, get_site_by_name, validate_parent, descendant_ids, find_similar_sites, specimen_counts, merge_sites, backfill_hierarchy
 from ..schemas.site import SiteRead, SiteCreate, SiteUpdate, DuplicateCheckRequest, DuplicateMatch, SiteMergeRequest
 from ..schemas.specimen import SpecimenDetail
 from ..models.user import User
@@ -56,6 +56,21 @@ def site_specimen_counts(
 ):
     """Specimens linked directly to each site, as {site_id: count}. Sum over children for rollups."""
     return specimen_counts(db)
+
+
+@router.post("/hierarchy-backfill")
+def hierarchy_backfill(
+    apply: bool = False,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """Build Country / State parent nodes from sites' country and state_province text and move
+    top-level sites under them. apply=false previews the changes without saving anything."""
+    try:
+        return backfill_hierarchy(db, apply)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Could not build the hierarchy: name clash between sites")
 
 
 @router.post("/check-duplicates", response_model=List[DuplicateMatch])

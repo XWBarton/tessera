@@ -207,13 +207,129 @@ def merge_sites(db: Session, source: Site, target: Site) -> None:
     db.flush()
     db.expire(source)
     db.delete(source)
+    db.flush()
+    db.refresh(target)
+    sync_geo_fields(db, target)
     db.commit()
+
+
+COUNTRY_LEVELS = {"country"}
+STATE_LEVELS = {"state", "province", "territory", "state/province"}
+
+
+def sync_geo_fields(db: Session, site: Site) -> None:
+    """Set country/state_province on site and everything beneath it from ancestors with a
+    Country / State level. Sites with no such ancestor keep whatever text they already have."""
+    def apply(node: Site, country: Optional[str], state: Optional[str], seen: Set[int]) -> None:
+        if node.id in seen:
+            return
+        seen.add(node.id)
+        lvl = (node.level or "").strip().lower()
+        if lvl in COUNTRY_LEVELS:
+            country = node.name
+        elif lvl in STATE_LEVELS:
+            state = node.name
+        if country:
+            node.country = country
+        if state:
+            node.state_province = state
+        for child in node.children:
+            apply(child, country, state, seen)
+
+    country = state = None
+    chain, node, seen_up = [], site.parent, {site.id}
+    while node is not None and node.id not in seen_up:
+        seen_up.add(node.id)
+        chain.append(node)
+        node = node.parent
+    for anc in reversed(chain):  # root first, so nearer ancestors win
+        lvl = (anc.level or "").strip().lower()
+        if lvl in COUNTRY_LEVELS:
+            country = anc.name
+        elif lvl in STATE_LEVELS:
+            state = anc.name
+    apply(site, country, state, set())
+
+
+def backfill_hierarchy(db: Session, apply: bool) -> dict:
+    """Create Country / State nodes from the text country and state_province fields and move
+    top-level sites under them. With apply=False nothing is saved (the work is rolled back)."""
+    created: List[str] = []
+    moved: List[dict] = []
+    skipped: List[dict] = []
+
+    def find_or_create(name: str, level: str, parent: Optional[Site]) -> Site:
+        pid = parent.id if parent else None
+        q = db.query(Site).filter(func.lower(Site.name) == name.lower())
+        q = q.filter(Site.parent_id == pid) if pid is not None else q.filter(Site.parent_id.is_(None))
+        node = q.first()
+        if node:
+            if not node.level:
+                node.level = level
+            return node
+        node = Site(name=name, level=level, parent_id=pid)
+        db.add(node)
+        db.flush()
+        db.refresh(node)
+        created.append(f"{node.path} ({level})")
+        touched.append(node)
+        return node
+
+    touched: List[Site] = []
+    candidates = db.query(Site).filter(Site.parent_id.is_(None)).order_by(Site.id).all()
+    # Sites that already are a place node (named after their own state/country) go first so
+    # that later sites find and reuse them instead of a duplicate node being created.
+    def _is_place_node(s: Site) -> bool:
+        n = s.name.strip().lower()
+        return n in {(s.country or "").strip().lower(), (s.state_province or "").strip().lower()} - {""}
+    candidates.sort(key=lambda s: (not _is_place_node(s), s.id))
+    for site in candidates:
+        country = (site.country or "").strip()
+        state = (site.state_province or "").strip()
+        if not country and not state:
+            continue
+        if (site.level or "").strip().lower() in COUNTRY_LEVELS | STATE_LEVELS:
+            continue
+        if site.name.strip().lower() == country.lower():
+            if not site.level:
+                site.level = "Country"
+            continue
+        parent: Optional[Site] = find_or_create(country, "Country", None) if country else None
+        if site.name.strip().lower() == state.lower():
+            # This site *is* the state: keep it, file it under its country
+            if not site.level:
+                site.level = "State"
+        elif state:
+            parent = find_or_create(state, "State", parent)
+        if parent is None:
+            continue
+        clash = get_site_by_name(db, site.name, parent.id)
+        if clash and clash.id != site.id:
+            skipped.append({"id": site.id, "name": site.name,
+                            "reason": f"'{clash.path}' already exists: possible duplicate, merge them first"})
+            continue
+        site.parent_id = parent.id
+        db.flush()
+        db.refresh(site)
+        moved.append({"id": site.id, "name": site.name, "to": parent.path})
+        touched.append(site)
+    for site in touched:
+        sync_geo_fields(db, site)
+    result = {"created": created, "moved": moved, "skipped": skipped, "applied": apply}
+    if apply:
+        db.commit()
+    else:
+        db.rollback()
+    return result
 
 
 def create_site(db: Session, site: SiteCreate) -> Site:
     db_site = Site(**site.model_dump(exclude={'project_ids'}))
     _set_projects(db, db_site, site.project_ids)
     db.add(db_site)
+    db.flush()
+    db.refresh(db_site)
+    sync_geo_fields(db, db_site)
     db.commit()
     db.refresh(db_site)
     return db_site
@@ -225,6 +341,9 @@ def update_site(db: Session, site: Site, updates: SiteUpdate) -> Site:
         setattr(site, field, value)
     if 'project_ids' in updates.model_fields_set:
         _set_projects(db, site, updates.project_ids or [])
+    db.flush()
+    db.refresh(site)
+    sync_geo_fields(db, site)
     db.commit()
     db.refresh(site)
     return site
