@@ -5,10 +5,12 @@ from ..models.project import Project
 from ..schemas.site import SiteCreate, SiteUpdate
 from typing import Optional, List, Set, TYPE_CHECKING
 from difflib import SequenceMatcher
+import json
 import math
 import re
 from sqlalchemy import func
 from ..models.specimen import specimen_sites_table
+from .. import geo
 
 if TYPE_CHECKING:
     from ..models.user import User
@@ -138,6 +140,7 @@ def find_similar_sites(
     radius_m: Optional[float],
     exclude_id: Optional[int] = None,
     user: Optional["User"] = None,
+    boundary: Optional[dict] = None,
 ) -> List[dict]:
     """Sites that look like the one described: similar name, or overlapping/nearby location.
 
@@ -148,6 +151,8 @@ def find_similar_sites(
     if exclude_id is not None:
         skip.add(exclude_id)
         skip |= descendant_ids(db, exclude_id)
+    if boundary and (lat is None or lon is None):
+        lat, lon = geo.boundary_centroid(boundary)
     has_coords = lat is not None and lon is not None
     results = []
     for cand in db.query(Site).all():
@@ -161,7 +166,14 @@ def find_similar_sites(
         dist = None
         if has_coords and cand.lat is not None and cand.lon is not None:
             dist = distance_m(lat, lon, cand.lat, cand.lon)
-            if dist <= max((radius_m or 0) + (cand.radius_m or 0), MIN_PROXIMITY_M):
+            cand_boundary = geo.parse_boundary(cand.boundary)
+            if boundary or cand_boundary:
+                # At least one real polygon: compare actual footprints rather than circles
+                a = geo.local_footprint(boundary, lat, lon, radius_m, lat)
+                b = geo.local_footprint(cand_boundary, cand.lat, cand.lon, cand.radius_m, lat)
+                if a is not None and b is not None and geo.footprints_conflict(a, b):
+                    reasons.append("nearby")
+            elif dist <= max((radius_m or 0) + (cand.radius_m or 0), MIN_PROXIMITY_M):
                 reasons.append("nearby")
         if reasons:
             results.append({
@@ -172,6 +184,39 @@ def find_similar_sites(
             })
     results.sort(key=lambda r: (-len(r["reasons"]), r["distance_m"] if r["distance_m"] is not None else 1e12))
     return results[:10]
+
+
+def sites_at_point(db: Session, lat: float, lon: float, user: Optional["User"] = None) -> List[Site]:
+    """Sites whose boundary (or radius circle) contains the point, most specific first."""
+    parent_of = dict(db.query(Site.id, Site.parent_id).all())
+
+    def depth(site_id: int) -> int:
+        d, seen = 0, set()
+        while parent_of.get(site_id) is not None and site_id not in seen:
+            seen.add(site_id)
+            site_id = parent_of[site_id]
+            d += 1
+        return d
+
+    hits = [
+        s for s in db.query(Site).all()
+        if geo.point_in_site(s, lat, lon) and (user is None or _site_visible(s, user))
+    ]
+    hits.sort(key=lambda s: (-depth(s.id), geo.site_area_m2(s)))
+    return hits
+
+
+def get_sites_for_export(db: Session, ids: Optional[List[int]] = None, project_id: Optional[int] = None,
+                         user: Optional["User"] = None) -> List[Site]:
+    q = db.query(Site)
+    if ids:
+        q = q.filter(Site.id.in_(ids))
+    if project_id is not None:
+        q = q.filter(Site.projects.any(id=project_id))
+    sites = q.order_by(Site.name).all()
+    if user is not None:
+        sites = [s for s in sites if _site_visible(s, user)]
+    return sites
 
 
 def specimen_counts(db: Session) -> dict:
@@ -323,8 +368,22 @@ def backfill_hierarchy(db: Session, apply: bool) -> dict:
     return result
 
 
+def _prepare_boundary(data: dict, existing: Optional[Site] = None) -> None:
+    """Serialise a boundary dict to JSON text, and give a boundary-only site its centroid as lat/lon."""
+    if data.get("boundary") is None:
+        return
+    boundary = data["boundary"]
+    data["boundary"] = json.dumps(boundary)
+    have_lat = data.get("lat", existing.lat if existing else None)
+    have_lon = data.get("lon", existing.lon if existing else None)
+    if have_lat is None or have_lon is None:
+        data["lat"], data["lon"] = geo.boundary_centroid(boundary)
+
+
 def create_site(db: Session, site: SiteCreate) -> Site:
-    db_site = Site(**site.model_dump(exclude={'project_ids'}))
+    data = site.model_dump(exclude={'project_ids'})
+    _prepare_boundary(data)
+    db_site = Site(**data)
     _set_projects(db, db_site, site.project_ids)
     db.add(db_site)
     db.flush()
@@ -337,6 +396,7 @@ def create_site(db: Session, site: SiteCreate) -> Site:
 
 def update_site(db: Session, site: Site, updates: SiteUpdate) -> Site:
     data = updates.model_dump(exclude_unset=True, exclude={'project_ids'})
+    _prepare_boundary(data, site)
     for field, value in data.items():
         setattr(site, field, value)
     if 'project_ids' in updates.model_fields_set:

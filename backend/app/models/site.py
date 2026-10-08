@@ -21,6 +21,8 @@ class Site(Base):
     parent_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("sites.id"), nullable=True, index=True)
     level: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     radius_m: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    # GeoJSON Polygon/MultiPolygon geometry as JSON text (WGS84, lon/lat order)
+    boundary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     country: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     state_province: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     description: Mapped[str] = mapped_column(Text, nullable=True)

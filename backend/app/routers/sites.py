@@ -2,7 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.exc import IntegrityError
 from ..dependencies import get_db, get_current_user, require_admin
-from ..crud.site import get_site, search_sites, get_all_sites, create_site, update_site, delete_site, get_site_by_name, validate_parent, descendant_ids, find_similar_sites, specimen_counts, merge_sites, backfill_hierarchy
+from ..crud.site import get_site, search_sites, get_all_sites, create_site, update_site, delete_site, get_site_by_name, validate_parent, descendant_ids, find_similar_sites, specimen_counts, merge_sites, backfill_hierarchy, sites_at_point, get_sites_for_export
+from .. import geo
+from fastapi.responses import Response
+import json
 from ..schemas.site import SiteRead, SiteCreate, SiteUpdate, DuplicateCheckRequest, DuplicateMatch, SiteMergeRequest
 from ..schemas.specimen import SpecimenDetail
 from ..models.user import User
@@ -58,6 +61,44 @@ def site_specimen_counts(
     return specimen_counts(db)
 
 
+@router.get("/at-point", response_model=List[SiteRead])
+def sites_containing_point(
+    lat: float,
+    lon: float,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Sites whose boundary (or radius circle) contains this point, most specific first."""
+    return sites_at_point(db, lat, lon, user=current_user)
+
+
+def _export_response(sites: List[Site], fmt: str, filename: str) -> Response:
+    if fmt == "geojson":
+        body = json.dumps(geo.sites_to_geojson(sites))
+        return Response(body, media_type="application/geo+json",
+                        headers={"Content-Disposition": f'attachment; filename="{filename}.geojson"'})
+    if fmt == "shapefile":
+        if not any(s.boundary or (s.lat is not None and s.lon is not None) for s in sites):
+            raise HTTPException(status_code=404, detail="None of these sites have a boundary or coordinates to export")
+        return Response(geo.sites_to_shapefile_zip(sites), media_type="application/zip",
+                        headers={"Content-Disposition": f'attachment; filename="{filename}_shapefile.zip"'})
+    raise HTTPException(status_code=400, detail="format must be 'geojson' or 'shapefile'")
+
+
+@router.get("/export")
+def export_sites(
+    format: str = "geojson",
+    project_id: Optional[int] = None,
+    ids: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Site boundaries (and points for sites without one) as GeoJSON or a zipped Shapefile."""
+    id_list = [int(i) for i in ids.split(",") if i.strip().isdigit()] if ids else None
+    sites = get_sites_for_export(db, id_list, project_id, user=current_user)
+    return _export_response(sites, format, "tessera_sites")
+
+
 @router.post("/hierarchy-backfill")
 def hierarchy_backfill(
     apply: bool = False,
@@ -81,7 +122,7 @@ def check_duplicate_sites(
 ):
     return find_similar_sites(
         db, body.name, body.parent_id, body.lat, body.lon, body.radius_m,
-        exclude_id=body.exclude_id, user=current_user,
+        exclude_id=body.exclude_id, user=current_user, boundary=body.boundary,
     )
 
 
@@ -198,6 +239,20 @@ def merge_site(
         db.rollback()
         raise HTTPException(status_code=400, detail="Merge would create two sub-sites with the same name under the target; rename one first")
     return get_site(db, target_id)
+
+
+@router.get("/{site_id}/export")
+def export_one_site(
+    site_id: int,
+    format: str = "geojson",
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    sites = get_sites_for_export(db, [site_id], user=current_user)
+    if not sites:
+        raise HTTPException(status_code=404, detail="Site not found")
+    safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in sites[0].name) or "site"
+    return _export_response(sites, format, safe)
 
 
 @router.get("/{site_id}/specimens", response_model=List[SpecimenDetail])

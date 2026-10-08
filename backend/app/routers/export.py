@@ -16,6 +16,7 @@ from ..dependencies import get_db, get_current_user, require_admin
 from ..crud.specimen import get_specimens_for_export
 from ..models.user import User
 from ..config import settings
+from .. import geo
 from typing import Optional
 
 router = APIRouter(prefix="/export", tags=["export"])
@@ -39,6 +40,11 @@ def _specimens_to_csv(specimens) -> str:
         "collection_lat",
         "collection_lon",
         "collection_location_text",
+        # Darwin Core terms (exact names) so the file loads into GBIF / ALA tooling without remapping
+        "geodeticDatum",
+        "coordinateUncertaintyInMeters",
+        "footprintWKT",
+        "footprintSRS",
         "storage_unit",
         "storage_tray",
         "storage_position",
@@ -75,6 +81,12 @@ def _specimens_to_csv(specimens) -> str:
         ] if p]
         geo_loc_name = ":".join(geo_parts) if geo_parts else ""
 
+        boundary = geo.parse_boundary(getattr(site, "boundary", None))
+        # The site radius only describes the specimen's position when the coordinates came from the site
+        inherited = (
+            site is not None and s.collection_lat is not None and site.lat is not None
+            and abs(s.collection_lat - site.lat) < 1e-6 and abs((s.collection_lon or 0) - (site.lon or 0)) < 1e-6
+        )
         row: dict = {
             "specimen_code": s.specimen_code,
             "project_code": s.project.code if s.project else "",
@@ -87,6 +99,10 @@ def _specimens_to_csv(specimens) -> str:
             "collection_lat": s.collection_lat if s.collection_lat is not None else "",
             "collection_lon": s.collection_lon if s.collection_lon is not None else "",
             "collection_location_text": s.collection_location_text or "",
+            "geodeticDatum": "WGS84" if (s.collection_lat is not None or boundary) else "",
+            "coordinateUncertaintyInMeters": site.radius_m if inherited and site.radius_m else "",
+            "footprintWKT": geo.footprint_wkt(boundary) if boundary else "",
+            "footprintSRS": "EPSG:4326" if boundary else "",
             "storage_unit": s.storage_tray.unit.name if s.storage_tray and s.storage_tray.unit else "",
             "storage_tray": s.storage_tray.name if s.storage_tray else "",
             "storage_position": s.storage_position if s.storage_position is not None else "",

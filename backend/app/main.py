@@ -48,6 +48,7 @@ def run_migrations():
             ("sites", "parent_id", "INTEGER REFERENCES sites(id)", None),
             ("sites", "level", "TEXT", None),
             ("sites", "radius_m", "REAL", None),
+            ("sites", "boundary", "TEXT", None),
             ("tube_usage_log", "non_destructive", "INTEGER DEFAULT 0", None),
             ("tube_usage_log", "destination_tube", "TEXT", None),
             ("sample_types", "is_specimen", "INTEGER DEFAULT 0",

@@ -1,12 +1,17 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Typography, Table, Button, Modal, Form, Input, InputNumber, Space, message, Popconfirm, Tag, Select, Drawer, Spin, Tabs, TreeSelect, AutoComplete, Alert, Tree, Segmented } from 'antd'
-import { PlusOutlined, DeleteOutlined, EditOutlined, CopyOutlined, MergeCellsOutlined, TableOutlined, ApartmentOutlined, ClusterOutlined } from '@ant-design/icons'
-import { MapContainer, TileLayer, LayersControl, CircleMarker, Circle, useMap } from 'react-leaflet'
+import { Typography, Table, Button, Modal, Form, Input, InputNumber, Space, message, Popconfirm, Tag, Select, Drawer, Spin, Tabs, TreeSelect, Alert, Tree, Segmented, Dropdown, Collapse, Radio } from 'antd'
+import { PlusOutlined, DeleteOutlined, EditOutlined, CopyOutlined, MergeCellsOutlined, TableOutlined, ApartmentOutlined, ClusterOutlined, DownloadOutlined, BorderOutlined } from '@ant-design/icons'
+import { MapContainer, TileLayer, LayersControl, CircleMarker, Circle, GeoJSON, useMap } from 'react-leaflet'
+import L from 'leaflet'
 import { useSites, useCreateSite, useUpdateSite, useDeleteSite, useSiteSpecimens, useSiteCounts, useSiteDuplicates, useMergeSite, useMoveSite, useBackfillHierarchy } from '../hooks/useSites'
-import { buildSiteTree, subtreeIds, effectiveLocation, SITE_LEVEL_SUGGESTIONS } from '../utils/siteTree'
+import { buildSiteTree, subtreeIds, effectiveLocation, geoFromParent } from '../utils/siteTree'
 import type { SiteNode } from '../utils/siteTree'
 import type { TreeProps } from 'antd'
+import BoundaryEditor from '../components/sites/BoundaryEditor'
+import { boundaryAreaHa, formatHa } from '../utils/geo'
+import { downloadSiteExport } from '../api/sites'
+import type { SiteBoundary } from '../types'
 import type { HierarchyBackfillResult } from '../api/sites'
 import { useProjects } from '../hooks/useProjects'
 import { useAuth } from '../context/AuthContext'
@@ -44,6 +49,8 @@ const PRECISION_ZOOM: Record<string, number> = {
   State: 6,
 }
 
+const LEVEL_CHOICES = ['Country', 'State', 'County', 'Town', 'Locality', 'Site']
+
 const REASON_TEXT: Record<string, string> = { name: 'similar name', nearby: 'overlapping / very close location' }
 
 function SiteForm({ onFinish, loading, initialValues, editingId, defaultParentId }: {
@@ -57,20 +64,44 @@ function SiteForm({ onFinish, loading, initialValues, editingId, defaultParentId
   const { data: projects } = useProjects()
   const { data: allSites } = useSites()
 
+  const [boundary, setBoundary] = useState<SiteBoundary | null>(initialValues?.boundary ?? null)
+  const [boundaryOpen, setBoundaryOpen] = useState(false)
+
   const name = Form.useWatch('name', form) as string | undefined
+  const levelValue = Form.useWatch('level', form) as string | undefined
   const parentId = Form.useWatch('parent_id', form) as number | null | undefined
   const lat = Form.useWatch('lat', form) as number | null | undefined
   const lon = Form.useWatch('lon', form) as number | null | undefined
   const radius = Form.useWatch('radius_m', form) as number | null | undefined
 
-  // Debounce so we don't hit the API on every keystroke
-  const [debounced, setDebounced] = useState({ name, parentId, lat, lon, radius })
-  useEffect(() => {
-    const t = setTimeout(() => setDebounced({ name, parentId, lat, lon, radius }), 400)
-    return () => clearTimeout(t)
-  }, [name, parentId, lat, lon, radius])
+  const parentSite = parentId != null ? allSites?.find((s) => s.id === parentId) : undefined
+  const parentLevel = (parentSite?.level ?? '').toLowerCase()
+  const suggestedLevel = parentLevel === 'country' ? 'State' : parentLevel === 'state' ? 'County' : parentLevel === 'county' ? 'Town' : parentLevel === 'town' ? 'Locality' : undefined
+  const levelChoices = [...new Set([...LEVEL_CHOICES, ...(initialValues?.level ? [initialValues.level] : [])])]
+  // Open the optional sections up front only when editing a site that already has data in them
+  const initialOpenPanels = [
+    ...(initialValues && (initialValues.lat != null || initialValues.radius_m != null || initialValues.boundary || initialValues.precision) ? ['location'] : []),
+    ...(initialValues && (initialValues.habitat_type || initialValues.description || initialValues.notes || initialValues.projects?.length) ? ['details'] : []),
+  ]
 
-  const hasCoords = debounced.lat != null && debounced.lon != null
+  // Picking a parent fills country / state from it straight away
+  useEffect(() => {
+    if (parentId == null || !allSites) return
+    const { country, state } = geoFromParent(allSites, parentId)
+    const patch: Record<string, string> = {}
+    if (country) patch.country = country
+    if (state) patch.state_province = state
+    if (Object.keys(patch).length) form.setFieldsValue(patch)
+  }, [parentId, allSites, form])
+
+  // Debounce so we don't hit the API on every keystroke
+  const [debounced, setDebounced] = useState({ name, parentId, lat, lon, radius, boundary })
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced({ name, parentId, lat, lon, radius, boundary }), 400)
+    return () => clearTimeout(t)
+  }, [name, parentId, lat, lon, radius, boundary])
+
+  const hasCoords = (debounced.lat != null && debounced.lon != null) || !!debounced.boundary
   const { data: matches } = useSiteDuplicates(
     {
       name: debounced.name,
@@ -78,6 +109,7 @@ function SiteForm({ onFinish, loading, initialValues, editingId, defaultParentId
       lat: debounced.lat ?? null,
       lon: debounced.lon ?? null,
       radius_m: debounced.radius ?? null,
+      boundary: debounced.boundary,
       exclude_id: editingId,
     },
     (debounced.name?.trim().length ?? 0) >= 3 || hasCoords,
@@ -98,66 +130,142 @@ function SiteForm({ onFinish, loading, initialValues, editingId, defaultParentId
   }, [allSites, editingId])
 
   return (
-    <Form form={form} layout="vertical" onFinish={onFinish} initialValues={{ parent_id: defaultParentId, ...initialValues }}>
-      <Form.Item name="parent_id" label="Parent Site" help="Place this inside a broader site, e.g. Jemmys Point under Lakes Entrance. Leave empty for a top-level site.">
+    <Form
+      form={form}
+      layout="vertical"
+      onFinish={(values) => onFinish({ ...values, level: values.level || null, boundary })}
+      initialValues={{ parent_id: defaultParentId, ...initialValues }}
+    >
+      <Form.Item name="level" label="What is it?" style={{ marginBottom: 8 }}>
+        <Radio.Group optionType="button" buttonStyle="solid" options={levelChoices} />
+      </Form.Item>
+      <div style={{ marginBottom: 16, minHeight: 22 }}>
+        {levelValue && (
+          <Button type="link" size="small" style={{ padding: 0, marginRight: 12 }} onClick={() => form.setFieldsValue({ level: undefined })}>
+            Clear
+          </Button>
+        )}
+        {suggestedLevel && suggestedLevel !== levelValue && (
+          <Typography.Text type="secondary" style={{ fontSize: 13 }}>
+            Under {parentSite?.name}, this is probably a{' '}
+            <a onClick={() => form.setFieldsValue({ level: suggestedLevel })}>{suggestedLevel}</a>
+          </Typography.Text>
+        )}
+      </div>
+
+      <Form.Item name="name" label="Name" rules={[{ required: true, message: 'Give it a name' }]} style={{ marginBottom: 8 }}>
+        <Input placeholder={levelValue === 'State' ? 'e.g. Tasmania' : levelValue === 'Country' ? 'e.g. Australia' : 'e.g. Jemmys Point'} autoFocus />
+      </Form.Item>
+
+      <Form.Item
+        name="parent_id"
+        label={<>Inside <Typography.Text type="secondary">(optional)</Typography.Text></>}
+        help={levelValue === 'Country' ? 'Countries are top-level, so leave this empty.' : 'The broader place this sits in. Leave empty for a top-level place.'}
+        style={{ marginBottom: 12 }}
+      >
         <TreeSelect
           allowClear
           showSearch
           treeDefaultExpandAll
           treeNodeFilterProp="title"
-          placeholder="None (top-level)"
+          placeholder="Nothing (top-level)"
           treeData={parentTree}
         />
       </Form.Item>
-      <Form.Item name="name" label="Site Name" rules={[{ required: true }]}>
-        <Input placeholder="e.g. Wetlands Reserve North" />
-      </Form.Item>
-      <Form.Item name="level" label="Level" help="Optional label for this tier of the hierarchy">
-        <AutoComplete
-          allowClear
-          placeholder="e.g. Town, Locality"
-          options={SITE_LEVEL_SUGGESTIONS.map((v) => ({ value: v }))}
-        />
-      </Form.Item>
-      <Form.Item name="country" label="Country" help="MIxS geo_loc_name level 1. Filled in automatically when the site sits under a Country place.">
-        <Input placeholder="e.g. Australia" />
-      </Form.Item>
-      <Form.Item name="state_province" label="State / Province" help="MIxS geo_loc_name level 2. Filled in automatically when the site sits under a State place.">
-        <Input placeholder="e.g. Western Australia" />
-      </Form.Item>
-      <Form.Item name="project_ids" label="Associated Projects">
-        <Select
-          mode="multiple"
-          placeholder="Tag with one or more projects (optional)"
-          allowClear
-          options={projects?.map((p) => ({ value: p.id, label: `${p.code} — ${p.name}` }))}
-        />
-      </Form.Item>
-      <Form.Item name="precision" label="Location Precision">
-        <Select placeholder="Select precision level" options={PRECISION_OPTIONS} allowClear />
-      </Form.Item>
-      <Form.Item name="habitat_type" label="Habitat Type">
-        <Input placeholder="e.g. Wetland, Forest, Grassland" />
-      </Form.Item>
-      <Form.Item name="description" label="Description">
-        <Input placeholder="e.g. Northern section near dam wall" />
-      </Form.Item>
-      <Form.Item label="Coordinates (optional)">
-        <Space.Compact style={{ width: '100%' }}>
-          <Form.Item name="lat" noStyle>
-            <InputNumber style={{ width: '50%' }} placeholder="Latitude" step={0.0001} />
-          </Form.Item>
-          <Form.Item name="lon" noStyle>
-            <InputNumber style={{ width: '50%' }} placeholder="Longitude" step={0.0001} />
-          </Form.Item>
-        </Space.Compact>
-      </Form.Item>
-      <Form.Item name="radius_m" label="Radius (metres)" help="How far the site extends from the point. Used to draw the area and to detect overlapping sites.">
-        <InputNumber style={{ width: '100%' }} min={0} step={50} placeholder="e.g. 150" />
-      </Form.Item>
-      <Form.Item name="notes" label="Notes">
-        <Input.TextArea rows={2} />
-      </Form.Item>
+      {(name?.trim() || parentSite) && (
+        <Typography.Paragraph type="secondary" style={{ fontSize: 13, marginBottom: 16 }}>
+          Will be saved as: <strong>{[parentSite?.path, name?.trim() || '…'].filter(Boolean).join(' > ')}</strong>
+        </Typography.Paragraph>
+      )}
+
+      <Collapse
+        ghost
+        style={{ marginBottom: 8 }}
+        defaultActiveKey={initialOpenPanels}
+        items={[
+          {
+            key: 'location',
+            forceRender: true,
+            label: <span>Location <Typography.Text type="secondary">(optional): coordinates, radius, boundary</Typography.Text></span>,
+            children: (
+              <>
+                <Form.Item label="Coordinates">
+                  <Space.Compact style={{ width: '100%' }}>
+                    <Form.Item name="lat" noStyle>
+                      <InputNumber style={{ width: '50%' }} placeholder="Latitude" step={0.0001} />
+                    </Form.Item>
+                    <Form.Item name="lon" noStyle>
+                      <InputNumber style={{ width: '50%' }} placeholder="Longitude" step={0.0001} />
+                    </Form.Item>
+                  </Space.Compact>
+                </Form.Item>
+                <Form.Item name="radius_m" label="Radius (metres)" help="How far the site extends from the point.">
+                  <InputNumber style={{ width: '100%' }} min={0} step={50} placeholder="e.g. 150" />
+                </Form.Item>
+                <Form.Item
+                  label="Boundary"
+                  help="Outline the site on the map. Used for overlap checks, matching GPS points to sites, and Shapefile / GeoJSON export."
+                >
+                  <Space>
+                    <Button icon={<BorderOutlined />} onClick={() => setBoundaryOpen(true)}>
+                      {boundary ? 'Edit boundary' : 'Draw boundary'}
+                    </Button>
+                    {boundary && <Tag color="green">{formatHa(boundaryAreaHa(boundary))}</Tag>}
+                  </Space>
+                </Form.Item>
+                <Form.Item name="precision" label="Location precision">
+                  <Select placeholder="Select precision level" options={PRECISION_OPTIONS} allowClear />
+                </Form.Item>
+              </>
+            ),
+          },
+          {
+            key: 'details',
+            forceRender: true,
+            label: <span>More details <Typography.Text type="secondary">(optional): habitat, notes, projects</Typography.Text></span>,
+            children: (
+              <>
+                <Form.Item name="habitat_type" label="Habitat type">
+                  <Input placeholder="e.g. Wetland, Forest, Grassland" />
+                </Form.Item>
+                <Form.Item name="description" label="Description">
+                  <Input placeholder="e.g. Northern section near dam wall" />
+                </Form.Item>
+                <Form.Item name="project_ids" label="Associated projects">
+                  <Select
+                    mode="multiple"
+                    placeholder="Tag with one or more projects"
+                    allowClear
+                    options={projects?.map((p) => ({ value: p.id, label: `${p.code} — ${p.name}` }))}
+                  />
+                </Form.Item>
+                <Form.Item name="notes" label="Notes">
+                  <Input.TextArea rows={2} />
+                </Form.Item>
+                <Form.Item label="Country / State" help="Filled in automatically from the place this sits in. Only fill these in for a site that isn't inside a Country / State.">
+                  <Space.Compact style={{ width: '100%' }}>
+                    <Form.Item name="country" noStyle>
+                      <Input style={{ width: '50%' }} placeholder="Country" />
+                    </Form.Item>
+                    <Form.Item name="state_province" noStyle>
+                      <Input style={{ width: '50%' }} placeholder="State / Province" />
+                    </Form.Item>
+                  </Space.Compact>
+                </Form.Item>
+              </>
+            ),
+          },
+        ]}
+      />
+      <BoundaryEditor
+        open={boundaryOpen}
+        value={boundary}
+        lat={lat}
+        lon={lon}
+        radiusM={radius}
+        onCancel={() => setBoundaryOpen(false)}
+        onSave={(b) => { setBoundary(b); setBoundaryOpen(false) }}
+      />
       {matches && matches.length > 0 && (
         <Alert
           type="warning"
@@ -189,6 +297,18 @@ function SiteForm({ onFinish, loading, initialValues, editingId, defaultParentId
   )
 }
 
+async function runSiteExport(
+  format: 'geojson' | 'shapefile',
+  opts: { siteId?: number; projectId?: number; name?: string },
+) {
+  try {
+    await downloadSiteExport(format, opts)
+    message.success(format === 'geojson' ? 'GeoJSON downloaded' : 'Shapefile downloaded')
+  } catch (e: unknown) {
+    message.error((e as Error).message && !('response' in (e as object)) ? (e as Error).message : 'Export failed')
+  }
+}
+
 function filterTree(nodes: SiteNode[], q: string): SiteNode[] {
   const out: SiteNode[] = []
   for (const n of nodes) {
@@ -202,11 +322,12 @@ function collectKeys(nodes: SiteNode[]): number[] {
   return nodes.flatMap((n) => (n.children?.length ? [n.id, ...collectKeys(n.children)] : []))
 }
 
-function SiteTreeView({ tree, sites, canEdit, onSelect }: {
+function SiteTreeView({ tree, sites, canEdit, onSelect, onAddChild }: {
   tree: SiteNode[]
   sites: Site[]
   canEdit: boolean
   onSelect: (site: Site) => void
+  onAddChild: (parent: Site) => void
 }) {
   const [search, setSearch] = useState('')
   const [expanded, setExpanded] = useState<React.Key[]>([])
@@ -230,6 +351,16 @@ function SiteTreeView({ tree, sites, canEdit, onSelect }: {
           <Typography.Text type="secondary" style={{ marginLeft: 8, fontSize: 12 }}>
             {n.total_specimens} specimen{n.total_specimens !== 1 ? 's' : ''}
           </Typography.Text>
+          <Button
+            type="text"
+            size="small"
+            icon={<PlusOutlined />}
+            title={`Add a site under ${n.name}`}
+            style={{ marginLeft: 6, color: '#1677ff' }}
+            onClick={(e) => { e.stopPropagation(); onAddChild(n) }}
+          >
+            Add
+          </Button>
         </span>
       ),
       children: n.children ? toData(n.children) : undefined,
@@ -269,7 +400,7 @@ function SiteTreeView({ tree, sites, canEdit, onSelect }: {
         <Button size="small" onClick={() => setExpanded(collectKeys(tree))}>Expand all</Button>
         <Button size="small" onClick={() => setExpanded([])}>Collapse all</Button>
         <Typography.Text type="secondary" style={{ fontSize: 13 }}>
-          {canEdit ? 'Click a site to open it. Drag one onto another to make it a sub-site.' : 'Click a site to open it.'}
+          Click a site to open it. Use + Add on a site to create a sub-site under it.{canEdit ? ' Drag one onto another to move it.' : ''}
         </Typography.Text>
       </Space>
       <Tree
@@ -312,8 +443,9 @@ function SiteMap({ site, loc }: { site: Site; loc: NonNullable<ReturnType<typeof
     <div>
       <MapContainer
         key={site.id}
-        center={pos}
-        zoom={zoom}
+        {...(loc.boundary
+          ? { bounds: L.geoJSON({ type: 'Feature', properties: {}, geometry: loc.boundary } as GeoJSON.Feature).getBounds().pad(0.15) }
+          : { center: pos, zoom })}
         style={{ height: 320, width: '100%', borderRadius: 8 }}
       >
         <LayersControl position="topright">
@@ -331,7 +463,12 @@ function SiteMap({ site, loc }: { site: Site; loc: NonNullable<ReturnType<typeof
           </LayersControl.BaseLayer>
         </LayersControl>
         <InvalidateSize />
-        {radiusM ? (
+        {loc.boundary ? (
+          <GeoJSON
+            data={{ type: 'Feature', properties: {}, geometry: loc.boundary } as GeoJSON.Feature}
+            style={{ color: '#1565c0', weight: 2, fillColor: '#1565c0', fillOpacity: 0.2 }}
+          />
+        ) : radiusM ? (
           <Circle
             center={pos}
             radius={radiusM}
@@ -348,6 +485,10 @@ function SiteMap({ site, loc }: { site: Site; loc: NonNullable<ReturnType<typeof
       {inherited ? (
         <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 6 }}>
           No coordinates of its own, showing the location of {loc.inheritedFrom!.name}
+        </Typography.Text>
+      ) : loc.boundary ? (
+        <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 6 }}>
+          Boundary covers {formatHa(boundaryAreaHa(loc.boundary))}
         </Typography.Text>
       ) : loc.radius_m ? (
         <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 6 }}>
@@ -433,6 +574,20 @@ function SiteSpecimensDrawer({ site, sites, onClose }: { site: Site; sites: Site
       open
       onClose={onClose}
       width={700}
+      extra={
+        <Dropdown
+          menu={{
+            items: [
+              { key: 'geojson', label: 'GeoJSON (.geojson)' },
+              { key: 'shapefile', label: 'Shapefile (.zip)' },
+            ],
+            onClick: ({ key }) =>
+              runSiteExport(key as 'geojson' | 'shapefile', { siteId: site.id, name: site.name.replace(/[^\w-]+/g, '_') }),
+          }}
+        >
+          <Button size="small" icon={<DownloadOutlined />}>Export</Button>
+        </Dropdown>
+      }
     >
       <Tabs defaultActiveKey={hasCoords ? 'map' : 'specimens'} items={tabItems} />
     </Drawer>
@@ -657,6 +812,17 @@ export default function SitesPage() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <Typography.Title level={3} style={{ margin: 0 }}>Sites</Typography.Title>
         <Space>
+          <Dropdown
+            menu={{
+              items: [
+                { key: 'geojson', label: 'GeoJSON (.geojson)' },
+                { key: 'shapefile', label: 'Shapefile (.zip)' },
+              ],
+              onClick: ({ key }) => runSiteExport(key as 'geojson' | 'shapefile', { projectId: projectFilter }),
+            }}
+          >
+            <Button icon={<DownloadOutlined />}>Export boundaries</Button>
+          </Dropdown>
           {user?.is_admin && needsTidy && (
             <Button icon={<ClusterOutlined />} onClick={openTidy} loading={backfill.isPending && !tidyPlan}>
               Build hierarchy from country / state
@@ -691,7 +857,13 @@ export default function SitesPage() {
         )}
       </div>
       {view === 'tree' ? (
-        <SiteTreeView tree={tree} sites={sites ?? []} canEdit={!!user} onSelect={setSelectedSite} />
+        <SiteTreeView
+          tree={tree}
+          sites={sites ?? []}
+          canEdit={!!user}
+          onSelect={setSelectedSite}
+          onAddChild={(p) => { setNewParentId(p.id); setCreateOpen(true) }}
+        />
       ) : (
       <Table
         dataSource={tree}
@@ -748,7 +920,9 @@ export default function SitesPage() {
         ))}
       </Modal>
 
-      <Modal title="Add Site" open={createOpen} onCancel={() => { setCreateOpen(false); setNewParentId(undefined) }} footer={null} width={520} destroyOnClose>
+      <Modal
+        title={newParentId != null ? `Add a site under ${(allSites ?? []).find((x) => x.id === newParentId)?.path ?? '…'}` : 'Add a site'}
+        open={createOpen} onCancel={() => { setCreateOpen(false); setNewParentId(undefined) }} footer={null} width={520} destroyOnClose>
         <SiteForm onFinish={handleCreate} loading={createSite.isPending} defaultParentId={newParentId} />
       </Modal>
 

@@ -66,6 +66,11 @@ export interface SiteProject {
   name: string
 }
 
+export interface SiteBoundary {
+  type: 'Polygon' | 'MultiPolygon'
+  coordinates: number[][][] | number[][][][]
+}
+
 export interface Site {
   id: number
   name: string
@@ -80,6 +85,7 @@ export interface Site {
   parent_id?: number | null
   level?: string | null
   radius_m?: number | null
+  boundary?: SiteBoundary | null
   path: string
   created_at: string
   projects?: SiteProject[]
@@ -286,6 +292,7 @@ export interface SiteCreate {
   parent_id?: number | null
   level?: string | null
   radius_m?: number | null
+  boundary?: SiteBoundary | null
   name: string
   description?: string
   habitat_type?: string
@@ -302,6 +309,7 @@ export interface SiteUpdate {
   parent_id?: number | null
   level?: string | null
   radius_m?: number | null
+  boundary?: SiteBoundary | null
   name?: string
   description?: string
   habitat_type?: string

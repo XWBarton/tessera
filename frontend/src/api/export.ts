@@ -1,6 +1,6 @@
 import apiClient from './client'
 
-const downloadBlob = (data: BlobPart, filename: string) => {
+export const downloadBlob = (data: BlobPart, filename: string) => {
   const url = window.URL.createObjectURL(new Blob([data]))
   const link = document.createElement('a')
   link.href = url

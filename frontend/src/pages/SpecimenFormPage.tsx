@@ -17,13 +17,14 @@ import {
   Col,
   Radio,
   Alert,
+  Tag,
 } from 'antd'
 import dayjs from 'dayjs'
 import { useProjects, useReserveSpecimenCode, useReleaseSpecimenCode } from '../hooks/useProjects'
 import type { CodeReservation } from '../api/projects'
 import { useSpecies } from '../hooks/useSpecies'
 import { useUsers } from '../hooks/useUsers'
-import { useSites } from '../hooks/useSites'
+import { useSites, useSitesAtPoint } from '../hooks/useSites'
 import { useSampleTypes } from '../hooks/useSampleTypes'
 import { useSpecimen, useCreateSpecimen, useUpdateSpecimen } from '../hooks/useSpecimens'
 import { useAuth } from '../context/AuthContext'
@@ -67,6 +68,24 @@ export default function SpecimenFormPage() {
   const derivedTotal = watchedAssociations.reduce((sum, a) => sum + (a.specimen_count || 0), 0)
   const watchedSampleTypeId: number | undefined = Form.useWatch('sample_type_id', form)
   const watchedProjectId: number | undefined = Form.useWatch('project_id', form)
+  const watchedSiteIds: number[] = Form.useWatch('site_ids', form) || []
+  const watchedLat: number | undefined = Form.useWatch('collection_lat', form)
+  const watchedLon: number | undefined = Form.useWatch('collection_lon', form)
+  const { data: pointMatches } = useSitesAtPoint(watchedLat, watchedLon)
+  // Suggest sites whose boundary contains the coordinates, skipping ones already chosen or that
+  // are just a parent of a chosen site (the more specific site already covers them)
+  const suggestedSites = (() => {
+    if (!pointMatches || !sites) return []
+    const covered = new Set<number>(watchedSiteIds)
+    watchedSiteIds.forEach((id) => {
+      let cur = sites.find((s) => s.id === id)
+      while (cur?.parent_id != null && !covered.has(cur.parent_id)) {
+        covered.add(cur.parent_id)
+        cur = sites.find((s) => s.id === cur!.parent_id)
+      }
+    })
+    return pointMatches.filter((s) => !covered.has(s.id)).slice(0, 3)
+  })()
   const watchedCustomCode: string | undefined = Form.useWatch('specimen_code', form)
 
   // Reserve the auto-generated code for the selected (primary) project on new tubes.
@@ -502,6 +521,22 @@ export default function SpecimenFormPage() {
               }))}
             />
           </Form.Item>
+
+          {suggestedSites.length > 0 && (
+            <div style={{ marginTop: -12, marginBottom: 16 }}>
+              <Typography.Text type="secondary" style={{ fontSize: 13 }}>These coordinates fall inside: </Typography.Text>
+              {suggestedSites.map((s) => (
+                <Tag
+                  key={s.id}
+                  color="blue"
+                  style={{ cursor: 'pointer' }}
+                  onClick={() => form.setFieldsValue({ site_ids: [...watchedSiteIds, s.id] })}
+                >
+                  + {s.path}
+                </Tag>
+              ))}
+            </div>
+          )}
 
           <Form.Item name="collection_location_text" label="Location Notes" help="Additional detail below the site-level geo_loc_name (e.g. 200m north of car park)">
             <Input placeholder="e.g. 200m north of car park, near creek edge" />

@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { getSites, createSite, updateSite, deleteSite, getSiteSpecimens, getSiteCounts, checkSiteDuplicates, mergeSite, backfillHierarchy } from '../api/sites'
+import { getSites, createSite, updateSite, deleteSite, getSiteSpecimens, getSiteCounts, checkSiteDuplicates, mergeSite, backfillHierarchy, getSitesAtPoint } from '../api/sites'
 import type { DuplicateCheckParams } from '../api/sites'
 import type { SiteCreate, SiteUpdate } from '../types'
 
@@ -76,6 +76,14 @@ export const useBackfillHierarchy = () => {
     },
   })
 }
+
+export const useSitesAtPoint = (lat?: number | null, lon?: number | null) =>
+  useQuery({
+    queryKey: ['sites-at-point', lat, lon],
+    queryFn: () => getSitesAtPoint(lat!, lon!),
+    enabled: typeof lat === 'number' && typeof lon === 'number',
+    staleTime: 30_000,
+  })
 
 export const useMoveSite = () => {
   const qc = useQueryClient()

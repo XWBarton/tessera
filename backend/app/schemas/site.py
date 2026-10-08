@@ -1,6 +1,13 @@
+import json
 from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import Optional, List
+
+from ..geo import validate_boundary
+
+
+def _check_boundary(v):
+    return validate_boundary(v) if v is not None else None
 
 
 class SiteProjectRef(BaseModel):
@@ -28,7 +35,10 @@ class SiteBase(BaseModel):
 
 
 class SiteCreate(SiteBase):
+    boundary: Optional[dict] = None
     project_ids: List[int] = []
+
+    _validate_boundary = field_validator("boundary")(_check_boundary)
 
 
 class SiteUpdate(BaseModel):
@@ -44,14 +54,23 @@ class SiteUpdate(BaseModel):
     parent_id: Optional[int] = None
     level: Optional[str] = None
     radius_m: Optional[float] = None
+    boundary: Optional[dict] = None
     project_ids: Optional[List[int]] = None
+
+    _validate_boundary = field_validator("boundary")(_check_boundary)
 
 
 class SiteRead(SiteBase):
     id: int
     path: str
+    boundary: Optional[dict] = None
     created_at: datetime
     projects: List[SiteProjectRef] = []
+
+    @field_validator("boundary", mode="before")
+    @classmethod
+    def _parse_boundary(cls, v):
+        return json.loads(v) if isinstance(v, str) else v
 
     class Config:
         from_attributes = True
@@ -63,6 +82,7 @@ class DuplicateCheckRequest(BaseModel):
     lat: Optional[float] = None
     lon: Optional[float] = None
     radius_m: Optional[float] = None
+    boundary: Optional[dict] = None
     exclude_id: Optional[int] = None
 
 

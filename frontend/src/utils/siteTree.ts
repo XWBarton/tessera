@@ -48,18 +48,39 @@ export function subtreeIds(sites: Site[], id: number): Set<number> {
 export function effectiveLocation(
   site: Site,
   sites: Site[],
-): { lat: number; lon: number; radius_m?: number | null; inheritedFrom?: Site } | null {
+): { lat: number; lon: number; radius_m?: number | null; boundary?: Site['boundary']; inheritedFrom?: Site } | null {
   const byId = new Map(sites.map((s) => [s.id, s]))
   let cur: Site | undefined = site
   const seen = new Set<number>()
   while (cur && !seen.has(cur.id)) {
     seen.add(cur.id)
     if (cur.lat != null && cur.lon != null) {
-      return { lat: cur.lat, lon: cur.lon, radius_m: cur.radius_m, inheritedFrom: cur.id === site.id ? undefined : cur }
+      return { lat: cur.lat, lon: cur.lon, radius_m: cur.radius_m, boundary: cur.boundary, inheritedFrom: cur.id === site.id ? undefined : cur }
     }
     cur = cur.parent_id != null ? byId.get(cur.parent_id) : undefined
   }
   return null
 }
 
-export const SITE_LEVEL_SUGGESTIONS = ['Country', 'State', 'County', 'Region', 'Town', 'Locality', 'Site', 'Microsite']
+const COUNTRY_LEVELS = ['country']
+const STATE_LEVELS = ['state', 'province', 'territory', 'state/province']
+
+/** Country / state a new sub-site would inherit from parentId: nearest Country/State-level ancestor
+ *  (the parent itself included), falling back to the country/state text on the nearest ancestor that has it. */
+export function geoFromParent(sites: Site[], parentId: number): { country?: string; state?: string } {
+  const byId = new Map(sites.map((s) => [s.id, s]))
+  const out: { country?: string; state?: string } = {}
+  const textFallback: { country?: string; state?: string } = {}
+  const seen = new Set<number>()
+  let cur = byId.get(parentId)
+  while (cur && !seen.has(cur.id)) {
+    seen.add(cur.id)
+    const lvl = (cur.level ?? '').trim().toLowerCase()
+    if (!out.country && COUNTRY_LEVELS.includes(lvl)) out.country = cur.name
+    if (!out.state && STATE_LEVELS.includes(lvl)) out.state = cur.name
+    if (!textFallback.country && cur.country) textFallback.country = cur.country
+    if (!textFallback.state && cur.state_province) textFallback.state = cur.state_province
+    cur = cur.parent_id != null ? byId.get(cur.parent_id) : undefined
+  }
+  return { country: out.country ?? textFallback.country, state: out.state ?? textFallback.state }
+}
