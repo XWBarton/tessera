@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Typography, Table, Button, Modal, Form, Input, InputNumber, Space, message, Popconfirm, Tag, Select, Drawer, Spin, Tabs, TreeSelect, Alert, Tree, Dropdown, Collapse, Radio, Descriptions, Segmented } from 'antd'
-import { PlusOutlined, DeleteOutlined, EditOutlined, CopyOutlined, MergeCellsOutlined, ClusterOutlined, FolderOutlined, FolderOpenOutlined, EnvironmentOutlined, DownloadOutlined, BorderOutlined } from '@ant-design/icons'
+import { PlusOutlined, DeleteOutlined, EditOutlined, CopyOutlined, MergeCellsOutlined, ClusterOutlined, FolderOutlined, FolderOpenOutlined, EnvironmentOutlined, DownloadOutlined, SearchOutlined } from '@ant-design/icons'
 import { MapContainer, TileLayer, LayersControl, CircleMarker, Circle, GeoJSON, useMap } from 'react-leaflet'
 import L from 'leaflet'
 import { useSites, useCreateSite, useUpdateSite, useDeleteSite, useSiteSpecimens, useSiteCounts, useSiteDuplicates, useMergeSite, useMoveSite, useBackfillHierarchy } from '../hooks/useSites'
@@ -187,10 +187,10 @@ function SiteForm({ onFinish, loading, initialValues, editingId, defaultParentId
               <>
                 <Form.Item
                   label="Boundary"
-                  help="Search OpenStreetMap for the place or draw it yourself. Importing an outline also fills in the coordinates. Used for overlap checks, matching GPS points to sites, and Shapefile / GeoJSON export."
+                  help="Import an outline from OpenStreetMap or draw your own. Fills in the coordinates too."
                 >
                   <Space>
-                    <Button icon={<BorderOutlined />} onClick={() => setBoundaryOpen(true)}>
+                    <Button icon={<SearchOutlined />} onClick={() => setBoundaryOpen(true)}>
                       {boundary ? 'Edit boundary' : 'Search or draw boundary'}
                     </Button>
                     {boundary && <Tag color="green">{formatHa(boundaryAreaHa(boundary))}</Tag>}
