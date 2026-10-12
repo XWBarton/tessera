@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Typography, Table, Button, Modal, Form, Input, InputNumber, Space, message, Popconfirm, Tag, Select, Drawer, Spin, Tabs, TreeSelect, Alert, Tree, Dropdown, Collapse, Radio, Descriptions } from 'antd'
+import { Typography, Table, Button, Modal, Form, Input, InputNumber, Space, message, Popconfirm, Tag, Select, Drawer, Spin, Tabs, TreeSelect, Alert, Tree, Dropdown, Collapse, Radio, Descriptions, Segmented } from 'antd'
 import { PlusOutlined, DeleteOutlined, EditOutlined, CopyOutlined, MergeCellsOutlined, ClusterOutlined, FolderOutlined, FolderOpenOutlined, EnvironmentOutlined, DownloadOutlined, BorderOutlined } from '@ant-design/icons'
 import { MapContainer, TileLayer, LayersControl, CircleMarker, Circle, GeoJSON, useMap } from 'react-leaflet'
 import L from 'leaflet'
@@ -9,6 +9,7 @@ import { buildSiteTree, subtreeIds, effectiveLocation, geoFromParent } from '../
 import type { SiteNode } from '../utils/siteTree'
 import type { TreeProps } from 'antd'
 import BoundaryEditor from '../components/sites/BoundaryEditor'
+import SitesOverviewMap from '../components/sites/SitesOverviewMap'
 import { boundaryAreaHa, formatHa } from '../utils/geo'
 import { downloadSiteExport } from '../api/sites'
 import type { SiteBoundary } from '../types'
@@ -267,7 +268,11 @@ function SiteForm({ onFinish, loading, initialValues, editingId, defaultParentId
         lon={lon}
         radiusM={radius}
         onCancel={() => setBoundaryOpen(false)}
-        onSave={(b) => { setBoundary(b); setBoundaryOpen(false) }}
+        onSave={(b, pt) => {
+          setBoundary(b)
+          if (pt) form.setFieldsValue({ lat: pt.lat, lon: pt.lon })
+          setBoundaryOpen(false)
+        }}
       />
       {matches && matches.length > 0 && (
         <Alert
@@ -706,6 +711,7 @@ export default function SitesPage() {
   const tree = useMemo(() => buildSiteTree(sites ?? [], counts), [sites, counts])
   const createSite = useCreateSite()
   const deleteSite = useDeleteSite()
+  const [view, setView] = useState<'tree' | 'map'>('tree')
   const [createOpen, setCreateOpen] = useState(false)
   const [editingSite, setEditingSite] = useState<Site | null>(null)
   const [selectedSite, setSelectedSite] = useState<Site | null>(null)
@@ -782,15 +788,24 @@ export default function SitesPage() {
           onChange={(v) => setProjectFilter(v)}
           options={projects?.map((p) => ({ value: p.id, label: `${p.code} — ${p.name}` }))}
         />
+        <Segmented
+          value={view}
+          onChange={(v) => setView(v as 'tree' | 'map')}
+          options={[{ label: 'Tree', value: 'tree' }, { label: 'Map', value: 'map', icon: <EnvironmentOutlined /> }]}
+        />
       </div>
       <Spin spinning={isLoading}>
-        <SiteTreeView
-          tree={tree}
-          sites={sites ?? []}
-          canEdit={!!user}
-          onSelect={setSelectedSite}
-          onAddChild={(p) => { setNewParentId(p.id); setCreateOpen(true) }}
-        />
+        {view === 'tree' ? (
+          <SiteTreeView
+            tree={tree}
+            sites={sites ?? []}
+            canEdit={!!user}
+            onSelect={setSelectedSite}
+            onAddChild={(p) => { setNewParentId(p.id); setCreateOpen(true) }}
+          />
+        ) : (
+          <SitesOverviewMap sites={sites ?? []} counts={counts} onSelect={setSelectedSite} />
+        )}
       </Spin>
 
       <Modal

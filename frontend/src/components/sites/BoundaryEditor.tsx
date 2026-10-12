@@ -116,7 +116,7 @@ export default function BoundaryEditor({ open, value, lat, lon, radiusM, onCance
   lon?: number | null
   radiusM?: number | null
   onCancel: () => void
-  onSave: (b: SiteBoundary | null) => void
+  onSave: (b: SiteBoundary | null, point: { lat: number; lon: number } | null) => void
 }) {
   const [draft, setDraft] = useState<SiteBoundary | null>(value)
   const apiRef = useRef<EditorApi | null>(null)
@@ -125,6 +125,8 @@ export default function BoundaryEditor({ open, value, lat, lon, radiusM, onCance
   const [busy, setBusy] = useState(false)
   const [picking, setPicking] = useState(false)
   const [pickZoom, setPickZoom] = useState<number>(16)
+  // Centre of the OSM place last chosen in this session; handed to the form so it can fill lat / lon
+  const [osmPoint, setOsmPoint] = useState<{ lat: number; lon: number } | null>(null)
   const mapRef = useRef<L.Map | null>(null)
   const canCircle = lat != null && lon != null && !!radiusM
 
@@ -137,6 +139,7 @@ export default function BoundaryEditor({ open, value, lat, lon, radiusM, onCance
       return
     }
     apiRef.current?.setBoundary(r.boundary)
+    setOsmPoint(r.lat != null && r.lon != null ? { lat: r.lat, lon: r.lon } : null)
     setResults(null)
     setPicking(false)
   }
@@ -176,11 +179,11 @@ export default function BoundaryEditor({ open, value, lat, lon, radiusM, onCance
       onCancel={onCancel}
       width={820}
       destroyOnClose
-      afterOpenChange={(o) => { if (o) setDraft(value) }}
+      afterOpenChange={(o) => { if (o) { setDraft(value); setOsmPoint(null) } }}
       footer={
         <Space>
           <Button onClick={onCancel}>Cancel</Button>
-          <Button type="primary" onClick={() => onSave(draft)}>
+          <Button type="primary" onClick={() => onSave(draft, draft ? osmPoint : null)}>
             {draft ? 'Use this boundary' : 'Save without a boundary'}
           </Button>
         </Space>

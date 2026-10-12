@@ -12,6 +12,8 @@ export interface OsmResult {
   kind: string
   boundary: SiteBoundary
   vertices: number
+  lat: number | null
+  lon: number | null
 }
 
 interface RawPlace {
@@ -21,6 +23,8 @@ interface RawPlace {
   name?: string
   category?: string
   type?: string
+  lat?: string
+  lon?: string
   geojson?: { type: string; coordinates: unknown }
 }
 
@@ -39,6 +43,8 @@ function toResult(p: RawPlace): OsmResult | null {
     kind: [p.category, p.type].filter(Boolean).join(': '),
     boundary: g as SiteBoundary,
     vertices: countVertices(g.coordinates),
+    lat: p.lat != null && isFinite(+p.lat) ? +(+p.lat).toFixed(6) : null,
+    lon: p.lon != null && isFinite(+p.lon) ? +(+p.lon).toFixed(6) : null,
   }
 }
 
