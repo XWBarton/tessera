@@ -72,6 +72,8 @@ export default function SpecimenFormPage() {
   const watchedLat: number | undefined = Form.useWatch('collection_lat', form)
   const watchedLon: number | undefined = Form.useWatch('collection_lon', form)
   const { data: pointMatches } = useSitesAtPoint(watchedLat, watchedLon)
+  // Sites the user removed on purpose shouldn't come back as suggestions
+  const [dismissedSiteIds, setDismissedSiteIds] = useState<number[]>([])
   // Suggest sites whose boundary contains the coordinates, skipping ones already chosen or that
   // are just a parent of a chosen site (the more specific site already covers them)
   const suggestedSites = (() => {
@@ -84,7 +86,7 @@ export default function SpecimenFormPage() {
         cur = sites.find((s) => s.id === cur!.parent_id)
       }
     })
-    return pointMatches.filter((s) => !covered.has(s.id)).slice(0, 3)
+    return pointMatches.filter((s) => !covered.has(s.id) && !dismissedSiteIds.includes(s.id)).slice(0, 3)
   })()
   const watchedCustomCode: string | undefined = Form.useWatch('specimen_code', form)
 
@@ -513,6 +515,8 @@ export default function SpecimenFormPage() {
                 (option?.label as string)?.toLowerCase().includes(input.toLowerCase())
               }
               onChange={(ids: number[]) => {
+                const removed = watchedSiteIds.filter((id) => !ids.includes(id))
+                if (removed.length > 0) setDismissedSiteIds((d) => [...new Set([...d, ...removed])])
                 if (ids.length > 0) handleSiteChange(ids[0])
               }}
               options={filteredSites.map((s) => ({
