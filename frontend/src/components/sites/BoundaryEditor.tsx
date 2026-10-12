@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
-import { Alert, Button, Modal, Space, Typography } from 'antd'
-import { MapContainer, TileLayer, LayersControl, useMap } from 'react-leaflet'
+import { Alert, Button, Input, List, Modal, Segmented, Space, Tag, Typography, message } from 'antd'
+import { MapContainer, TileLayer, LayersControl, useMap, useMapEvents } from 'react-leaflet'
 import L from 'leaflet'
 import '@geoman-io/leaflet-geoman-free'
 import '@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css'
 import 'leaflet/dist/leaflet.css'
 import type { SiteBoundary } from '../../types'
 import { boundaryAreaHa, circleToPolygon, formatHa } from '../../utils/geo'
+import { MAX_VERTICES, osmPolygonAt, searchOsmPolygons, type OsmResult } from '../../utils/osm'
 
 interface EditorApi {
   setBoundary: (b: SiteBoundary | null) => void
@@ -87,6 +88,18 @@ function DrawLayer({ initial, apiRef, onChange }: {
   return null
 }
 
+function PickHandler({ active, onPick }: { active: boolean; onPick: (lat: number, lon: number) => void }) {
+  const map = useMap()
+  useEffect(() => {
+    map.getContainer().style.cursor = active ? 'crosshair' : ''
+    return () => { map.getContainer().style.cursor = '' }
+  }, [map, active])
+  useMapEvents({
+    click: (e) => { if (active) onPick(e.latlng.lat, e.latlng.lng) },
+  })
+  return null
+}
+
 function InvalidateSize() {
   const map = useMap()
   useEffect(() => {
@@ -107,10 +120,53 @@ export default function BoundaryEditor({ open, value, lat, lon, radiusM, onCance
 }) {
   const [draft, setDraft] = useState<SiteBoundary | null>(value)
   const apiRef = useRef<EditorApi | null>(null)
+  const [query, setQuery] = useState('')
+  const [results, setResults] = useState<OsmResult[] | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [picking, setPicking] = useState(false)
+  const [pickZoom, setPickZoom] = useState<number>(16)
+  const mapRef = useRef<L.Map | null>(null)
   const canCircle = lat != null && lon != null && !!radiusM
 
   const center: [number, number] = lat != null && lon != null ? [lat, lon] : [-25.5, 134]
   const zoom = lat != null && lon != null ? 14 : 4
+
+  const useOutline = (r: OsmResult) => {
+    if (r.vertices > MAX_VERTICES) {
+      message.error(`That outline has ${r.vertices.toLocaleString()} points (limit ${MAX_VERTICES.toLocaleString()}). Pick a smaller feature.`)
+      return
+    }
+    apiRef.current?.setBoundary(r.boundary)
+    setResults(null)
+    setPicking(false)
+  }
+
+  const runSearch = async () => {
+    if (!query.trim()) return
+    setBusy(true)
+    try {
+      const c = mapRef.current?.getCenter()
+      const found = await searchOsmPolygons(query.trim(), c ? { lat: c.lat, lon: c.lng } : undefined)
+      setResults(found)
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : 'OpenStreetMap search failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const pickAt = async (lat: number, lon: number) => {
+    setBusy(true)
+    try {
+      const r = await osmPolygonAt(lat, lon, pickZoom)
+      if (!r) message.warning('No OpenStreetMap area found there. Try a different feature size or spot.')
+      else useOutline(r)
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : 'OpenStreetMap lookup failed')
+    } finally {
+      setBusy(false)
+    }
+  }
 
   return (
     <Modal
@@ -152,7 +208,53 @@ export default function BoundaryEditor({ open, value, lat, lon, radiusM, onCance
           {draft ? `Area: ${formatHa(boundaryAreaHa(draft))}` : 'No boundary drawn yet'}
         </Typography.Text>
       </Space>
-      <MapContainer center={center} zoom={zoom} style={{ height: 460, width: '100%', borderRadius: 8 }}>
+      <Space style={{ marginBottom: 10 }} wrap>
+        <Input.Search
+          placeholder="Import from OpenStreetMap by name (park, reserve, lake…)"
+          style={{ width: 360 }}
+          value={query}
+          loading={busy}
+          enterButton="Search"
+          onChange={(e) => setQuery(e.target.value)}
+          onSearch={runSearch}
+        />
+        <Button size="small" type={picking ? 'primary' : 'default'} onClick={() => setPicking((p) => !p)}>
+          {picking ? 'Click the map…' : 'Pick area on map'}
+        </Button>
+        {picking && (
+          <Segmented
+            size="small"
+            value={pickZoom}
+            onChange={(v) => setPickZoom(v as number)}
+            options={[{ label: 'Plot', value: 18 }, { label: 'Park / reserve', value: 16 }, { label: 'Locality', value: 13 }]}
+          />
+        )}
+      </Space>
+      {results && (
+        <List
+          size="small"
+          bordered
+          style={{ marginBottom: 10, maxHeight: 160, overflowY: 'auto' }}
+          locale={{ emptyText: 'No areas with an outline found. Try a more specific name.' }}
+          dataSource={results}
+          renderItem={(r) => (
+            <List.Item
+              actions={[<Button key="use" size="small" type="link" onClick={() => useOutline(r)}>Use outline</Button>]}
+            >
+              <List.Item.Meta
+                title={<span style={{ fontSize: 13 }}>{r.name}</span>}
+                description={
+                  <Space size={4}>
+                    {r.kind && <Tag>{r.kind}</Tag>}
+                    <span>{formatHa(boundaryAreaHa(r.boundary))}, {r.vertices.toLocaleString()} points</span>
+                  </Space>
+                }
+              />
+            </List.Item>
+          )}
+        />
+      )}
+      <MapContainer ref={mapRef} center={center} zoom={zoom} style={{ height: 460, width: '100%', borderRadius: 8 }}>
         <LayersControl position="topright">
           <LayersControl.BaseLayer name="Street">
             <TileLayer
@@ -168,6 +270,7 @@ export default function BoundaryEditor({ open, value, lat, lon, radiusM, onCance
           </LayersControl.BaseLayer>
         </LayersControl>
         <InvalidateSize />
+        <PickHandler active={picking && !busy} onPick={pickAt} />
         <DrawLayer initial={value} apiRef={apiRef} onChange={setDraft} />
       </MapContainer>
     </Modal>
