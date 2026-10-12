@@ -1,10 +1,11 @@
 import re
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, selectinload
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import and_, or_
 from ..models.specimen import Specimen, specimen_additional_projects_table
 from ..models.specimen_species import SpecimenSpecies
+from ..models.specimen_host import SpecimenHost
 from ..models.specimen_code_reservation import SpecimenCodeReservation
 from ..models.project import Project
 from ..models.site import Site
@@ -35,6 +36,7 @@ def _build_base_query(
         joinedload(Specimen.collector),
         joinedload(Specimen.site),
         joinedload(Specimen.sites),
+        selectinload(Specimen.host_links),
         joinedload(Specimen.sample_type),
         joinedload(Specimen.species_associations).joinedload(SpecimenSpecies.species),
         joinedload(Specimen.storage_tray).joinedload(StorageTray.unit),
@@ -129,6 +131,7 @@ def get_specimen(db: Session, specimen_id: int) -> Optional[Specimen]:
             joinedload(Specimen.collector),
             joinedload(Specimen.site),
             joinedload(Specimen.sites),
+            selectinload(Specimen.host_links),
             joinedload(Specimen.sample_type),
             joinedload(Specimen.species_associations).joinedload(SpecimenSpecies.species),
             joinedload(Specimen.storage_tray).joinedload(StorageTray.unit),
@@ -284,12 +287,13 @@ def _create_specimen_attempt(
         storage_tray_id=specimen_data.storage_tray_id,
         storage_position=specimen_data.storage_position,
         preservation_method=specimen_data.preservation_method,
-        host_organism=specimen_data.host_organism,
         status=specimen_data.status or "active",
         notes=specimen_data.notes,
         sites=site_objs,
         additional_projects=additional_project_objs,
     )
+    # "hosts" wins; a client that only sends the old host_organism still works
+    _apply_hosts(db_specimen, specimen_data.hosts or [specimen_data.host_organism])
     db.add(db_specimen)
     db.flush()
 
@@ -353,11 +357,29 @@ def create_specimen(
     return specimen
 
 
+def _clean_hosts(hosts) -> list[str]:
+    """Trim, drop blanks and case-insensitive duplicates, keep entry order."""
+    seen, out = set(), []
+    for h in hosts or []:
+        name = (h or "").strip()
+        if name and name.lower() not in seen:
+            seen.add(name.lower())
+            out.append(name)
+    return out
+
+
+def _apply_hosts(specimen: Specimen, hosts) -> None:
+    """Set the host list and keep the legacy host_organism column mirroring it."""
+    names = _clean_hosts(hosts)
+    specimen.host_links = [SpecimenHost(name=n, position=i) for i, n in enumerate(names)]
+    specimen.host_organism = "; ".join(names) or None
+
+
 def update_specimen(
     db: Session, specimen: Specimen, specimen_update: SpecimenUpdate
 ) -> Specimen:
     update_data = specimen_update.model_dump(
-        exclude_unset=True, exclude={"species_associations", "site_ids", "additional_project_ids"}
+        exclude_unset=True, exclude={"species_associations", "site_ids", "additional_project_ids", "hosts", "host_organism"}
     )
 
     # When quantity_value changes, preserve how much has been used so the
@@ -372,6 +394,11 @@ def update_specimen(
 
     for field, value in update_data.items():
         setattr(specimen, field, value)
+
+    if specimen_update.hosts is not None:
+        _apply_hosts(specimen, specimen_update.hosts)
+    elif "host_organism" in specimen_update.model_fields_set:
+        _apply_hosts(specimen, [specimen_update.host_organism])
 
     if specimen_update.site_ids is not None:
         site_objs = db.query(Site).filter(Site.id.in_(specimen_update.site_ids)).all()

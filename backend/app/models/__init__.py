@@ -9,4 +9,5 @@ from .specimen_code_reservation import SpecimenCodeReservation
 from .tube_usage_log import TubeUsageLog
 from .lookup_option import LookupOption
 from .specimen_photo import SpecimenPhoto
+from .specimen_host import SpecimenHost
 from .storage import StorageUnit, StorageTray

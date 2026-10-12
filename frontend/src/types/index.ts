@@ -133,6 +133,7 @@ export interface Specimen {
   storage_position?: number
   preservation_method?: string
   host_organism?: string
+  hosts?: string[]
   status?: string
   notes?: string
   created_at: string
@@ -189,6 +190,7 @@ export interface SpecimenCreate {
   storage_position?: number
   preservation_method?: string
   host_organism?: string
+  hosts?: string[]
   status?: string
   notes?: string
   species_associations: SpecimenSpeciesCreate[]
@@ -214,6 +216,7 @@ export interface SpecimenUpdate {
   storage_position?: number
   preservation_method?: string
   host_organism?: string
+  hosts?: string[]
   status?: string
   notes?: string
   species_associations?: SpecimenSpeciesCreate[]

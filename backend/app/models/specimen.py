@@ -71,3 +71,11 @@ class Specimen(Base):
         "SpecimenSpecies", back_populates="specimen", cascade="all, delete-orphan"
     )
     photos = relationship("SpecimenPhoto", back_populates="specimen", cascade="all, delete-orphan")
+    host_links = relationship(
+        "SpecimenHost", back_populates="specimen", cascade="all, delete-orphan",
+        order_by="SpecimenHost.position", lazy="select",
+    )
+
+    @property
+    def hosts(self) -> list[str]:
+        return [h.name for h in self.host_links]

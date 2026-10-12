@@ -170,6 +170,20 @@ def run_migrations():
             conn.commit()
             print("[tessera] Migration: created specimen_sites junction table")
 
+        # --- specimen_hosts: several hosts per tube. The table itself is created by create_all;
+        # copy each existing single host_organism across untouched (never split or edited).
+        # host_organism stays in place and is kept mirrored on every save, so this is safe to
+        # repeat: it only fills tubes that have a host_organism but no host rows yet.
+        copied = conn.execute(text("""
+            INSERT INTO specimen_hosts (specimen_id, name, position)
+            SELECT id, TRIM(host_organism), 0 FROM specimens
+            WHERE host_organism IS NOT NULL AND TRIM(host_organism) != ''
+              AND NOT EXISTS (SELECT 1 FROM specimen_hosts h WHERE h.specimen_id = specimens.id)
+        """)).rowcount
+        conn.commit()
+        if copied:
+            print(f"[tessera] Migration: copied {copied} existing host(s) into specimen_hosts")
+
         # --- Make specimens.collector_id nullable (SQLite requires table recreation) ---
         col_info = {
             row[1]: row

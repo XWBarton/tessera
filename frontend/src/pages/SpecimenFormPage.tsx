@@ -175,7 +175,7 @@ export default function SpecimenFormPage() {
         storage_tray_id: specimen.storage_tray_id,
         storage_position: specimen.storage_position,
         preservation_method: specimen.preservation_method,
-        host_organism: specimen.host_organism,
+        hosts: specimen.hosts?.length ? specimen.hosts : specimen.host_organism ? [specimen.host_organism] : [],
         status: specimen.status || 'active',
         notes: specimen.notes,
         species_associations: specimen.species_associations.map((a) => ({
@@ -258,7 +258,7 @@ export default function SpecimenFormPage() {
           storage_tray_id: values.storage_tray_id as number | undefined,
           storage_position: values.storage_position as number | undefined,
           preservation_method: values.preservation_method as string | undefined,
-          host_organism: values.host_organism as string | undefined,
+          hosts: (values.hosts as string[] | undefined) ?? [],
           status: values.status as string | undefined,
           notes: values.notes as string | undefined,
           species_associations: speciesAssociations,
@@ -286,7 +286,7 @@ export default function SpecimenFormPage() {
           storage_tray_id: values.storage_tray_id as number | undefined,
           storage_position: values.storage_position as number | undefined,
           preservation_method: values.preservation_method as string | undefined,
-          host_organism: values.host_organism as string | undefined,
+          hosts: (values.hosts as string[] | undefined) ?? [],
           status: values.status as string | undefined,
           notes: values.notes as string | undefined,
           species_associations: speciesAssociations,
@@ -619,10 +619,13 @@ export default function SpecimenFormPage() {
             </Col>
           </Row>
 
-          <Form.Item name="host_organism" label="Host Organism" help="Select from the species lookup (or 'Questing' / 'Unknown'), or type a free-text host">
-            <AutoComplete
+          <Form.Item name="hosts" label="Host Organisms" help="Add one or more: pick from the species lookup (or 'Questing' / 'Unknown'), or type a free-text host and press Enter">
+            <Select
+              mode="tags"
               options={hostOptions}
               onSearch={setHostQuery}
+              onBlur={() => setHostQuery('')}
+              optionLabelProp="value"
               allowClear
               placeholder="Search species, or type a host…"
               filterOption={false}

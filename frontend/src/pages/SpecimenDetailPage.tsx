@@ -772,8 +772,13 @@ export default function SpecimenDetailPage() {
           <Descriptions.Item label="Preservation">
             {specimen.preservation_method || '—'}
           </Descriptions.Item>
-          <Descriptions.Item label="Host Organism">
-            {specimen.host_organism ? <em>{specimen.host_organism}</em> : '—'}
+          <Descriptions.Item label="Host Organisms">
+            {(() => {
+              const hosts = specimen.hosts?.length ? specimen.hosts : specimen.host_organism ? [specimen.host_organism] : []
+              return hosts.length
+                ? hosts.map((h, i) => <span key={h}>{i > 0 && ', '}<em>{h}</em></span>)
+                : '—'
+            })()}
           </Descriptions.Item>
           <Descriptions.Item label="Status">
             {(() => {

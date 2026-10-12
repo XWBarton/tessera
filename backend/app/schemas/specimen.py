@@ -63,7 +63,8 @@ class SpecimenBase(BaseModel):
     storage_tray_id: Optional[int] = None
     storage_position: Optional[int] = None
     preservation_method: Optional[str] = None
-    host_organism: Optional[str] = None
+    host_organism: Optional[str] = None  # legacy single value; mirrors "hosts" joined with "; "
+    hosts: List[str] = []
     status: str = "active"
     notes: Optional[str] = None
 
@@ -95,6 +96,7 @@ class SpecimenUpdate(BaseModel):
     storage_position: Optional[int] = None
     preservation_method: Optional[str] = None
     host_organism: Optional[str] = None
+    hosts: Optional[List[str]] = None
     status: Optional[str] = None
     notes: Optional[str] = None
     species_associations: Optional[List[SpecimenSpeciesCreate]] = None
