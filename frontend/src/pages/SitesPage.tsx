@@ -19,14 +19,6 @@ import { useAuth } from '../context/AuthContext'
 import type { Site, Specimen } from '../types'
 import 'leaflet/dist/leaflet.css'
 
-const PRECISION_OPTIONS = [
-  { value: 'GPS', label: 'GPS — exact point' },
-  { value: 'Suburb', label: 'Suburb / locality' },
-  { value: 'City', label: 'City / town' },
-  { value: 'Region', label: 'Region / district' },
-  { value: 'State', label: 'State / territory' },
-]
-
 const PRECISION_COLORS: Record<string, string> = {
   GPS: 'green',
   Suburb: 'blue',
@@ -89,7 +81,7 @@ function SiteForm({ onFinish, loading, initialValues, editingId, defaultParentId
   const levelChoices = legacyLevel ? [...LEVEL_CHOICES, { label: legacyLevel, value: legacyLevel }] : LEVEL_CHOICES
   // Open the optional sections up front only when editing a site that already has data in them
   const initialOpenPanels = [
-    ...(initialValues && (initialValues.lat != null || initialValues.radius_m != null || initialValues.boundary || initialValues.precision) ? ['location'] : []),
+    ...(initialValues && (initialValues.lat != null || initialValues.radius_m != null || initialValues.boundary) ? ['location'] : []),
     ...(initialValues && (initialValues.habitat_type || initialValues.description || initialValues.notes || initialValues.projects?.length) ? ['details'] : []),
   ]
 
@@ -190,9 +182,20 @@ function SiteForm({ onFinish, loading, initialValues, editingId, defaultParentId
           {
             key: 'location',
             forceRender: true,
-            label: <span>Location <Typography.Text type="secondary">(optional): coordinates, radius, boundary</Typography.Text></span>,
+            label: <span>Location <Typography.Text type="secondary">(optional): boundary, coordinates, radius</Typography.Text></span>,
             children: (
               <>
+                <Form.Item
+                  label="Boundary"
+                  help="Search OpenStreetMap for the place or draw it yourself. Importing an outline also fills in the coordinates. Used for overlap checks, matching GPS points to sites, and Shapefile / GeoJSON export."
+                >
+                  <Space>
+                    <Button icon={<BorderOutlined />} onClick={() => setBoundaryOpen(true)}>
+                      {boundary ? 'Edit boundary' : 'Search or draw boundary'}
+                    </Button>
+                    {boundary && <Tag color="green">{formatHa(boundaryAreaHa(boundary))}</Tag>}
+                  </Space>
+                </Form.Item>
                 <Form.Item label="Coordinates">
                   <Space.Compact style={{ width: '100%' }}>
                     <Form.Item name="lat" noStyle>
@@ -205,20 +208,6 @@ function SiteForm({ onFinish, loading, initialValues, editingId, defaultParentId
                 </Form.Item>
                 <Form.Item name="radius_m" label="Radius (metres)" help="How far the site extends from the point.">
                   <InputNumber style={{ width: '100%' }} min={0} step={50} placeholder="e.g. 150" />
-                </Form.Item>
-                <Form.Item
-                  label="Boundary"
-                  help="Outline the site on the map. Used for overlap checks, matching GPS points to sites, and Shapefile / GeoJSON export."
-                >
-                  <Space>
-                    <Button icon={<BorderOutlined />} onClick={() => setBoundaryOpen(true)}>
-                      {boundary ? 'Edit boundary' : 'Draw boundary'}
-                    </Button>
-                    {boundary && <Tag color="green">{formatHa(boundaryAreaHa(boundary))}</Tag>}
-                  </Space>
-                </Form.Item>
-                <Form.Item name="precision" label="Location precision">
-                  <Select placeholder="Select precision level" options={PRECISION_OPTIONS} allowClear />
                 </Form.Item>
               </>
             ),
