@@ -1,11 +1,12 @@
 import { useRef, useState } from 'react'
-import { Typography, Table, Button, Modal, Form, Input, Space, message, Popconfirm, Upload, Alert } from 'antd'
-import { PlusOutlined, DeleteOutlined, EditOutlined, UploadOutlined } from '@ant-design/icons'
+import { Typography, Table, Button, Modal, Form, Input, Space, message, Popconfirm, Upload, Alert, Segmented } from 'antd'
+import { PlusOutlined, DeleteOutlined, EditOutlined, UploadOutlined, ApartmentOutlined, TableOutlined } from '@ant-design/icons'
 import { useSpecies, useCreateSpecies, useUpdateSpecies, useDeleteSpecies } from '../hooks/useSpecies'
 import { useAuth } from '../context/AuthContext'
 import { importSpeciesCSV } from '../api/species'
 import { useQueryClient } from '@tanstack/react-query'
 import type { Species } from '../types'
+import SpeciesTree from '../components/species/SpeciesTree'
 
 // Shared set of form fields used by both the Add and Edit modals.
 function SpeciesFields() {
@@ -51,6 +52,13 @@ export default function SpeciesPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [form] = Form.useForm()
+  const [view, setView] = useState<'tree' | 'table'>(() => {
+    try { return localStorage.getItem('speciesView') === 'tree' ? 'tree' : 'table' } catch { return 'table' }
+  })
+  const changeView = (v: 'tree' | 'table') => {
+    setView(v)
+    try { localStorage.setItem('speciesView', v) } catch { /* per-viewer convenience only */ }
+  }
 
   const handleCreate = async (values: { scientific_name: string; common_name?: string; notes?: string; genus?: string; family?: string; order_name?: string; taxon_id?: string }) => {
     try {
@@ -174,18 +182,42 @@ export default function SpeciesPage() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <Typography.Title level={3} style={{ margin: 0 }}>Species Lookup</Typography.Title>
+        <Space>
+          <Segmented
+            value={view}
+            onChange={(v) => changeView(v as 'tree' | 'table')}
+            options={[
+              { value: 'tree', icon: <ApartmentOutlined />, label: 'Tree' },
+              { value: 'table', icon: <TableOutlined />, label: 'Table' },
+            ]}
+          />
         {user?.is_admin && (
-          <Space>
+          <>
             <Button icon={<UploadOutlined />} onClick={() => setImportModalOpen(true)}>
               Import CSV
             </Button>
             <Button type="primary" icon={<PlusOutlined />} onClick={() => setModalOpen(true)}>
               Add Species
             </Button>
-          </Space>
+          </>
         )}
+        </Space>
       </div>
-      <Table dataSource={species} columns={columns} rowKey="id" loading={isLoading} />
+      {view === 'tree' ? (
+        <SpeciesTree
+          species={species ?? []}
+          canEdit={!!user?.is_admin}
+          onEdit={setEditingSpecies}
+          onDelete={(s) =>
+            deleteSpecies
+              .mutateAsync(s.id)
+              .then(() => message.success('Deleted'))
+              .catch(() => message.error('Failed to delete'))
+          }
+        />
+      ) : (
+        <Table dataSource={species} columns={columns} rowKey="id" loading={isLoading} />
+      )}
 
       {/* Add single species modal */}
       <Modal title="Add Species" open={modalOpen} onCancel={() => setModalOpen(false)} footer={null}>
