@@ -2,7 +2,7 @@ import apiClient from './client'
 import type { Site, SiteBoundary, SiteCreate, SiteUpdate, SiteDuplicateMatch, Specimen } from '../types'
 import { downloadBlob } from './export'
 
-export const getSites = async (params?: { q?: string; project_id?: number }): Promise<Site[]> => {
+export const getSites = async (params?: { q?: string; project_id?: number; limit?: number }): Promise<Site[]> => {
   const { data } = await apiClient.get<Site[]>('/sites/', { params: params || {} })
   return data
 }
@@ -23,6 +23,8 @@ export const deleteSite = async (id: number): Promise<void> => {
 
 export interface SiteBulkImportRow {
   name: string
+  parent?: string
+  level?: string
   description?: string
   habitat_type?: string
   lat?: number

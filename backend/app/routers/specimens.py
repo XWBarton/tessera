@@ -48,6 +48,7 @@ from ..models.tube_usage_log import TubeUsageLog
 from ..models.specimen_photo import SpecimenPhoto
 from ..models.user import User
 from ..models.site import Site
+from ..crud.site import resolve_site_ref
 from ..models.sample_type import SampleType
 from ..models.species import Species as SpeciesModel
 from ..models.project import Project as ProjectModel
@@ -834,9 +835,11 @@ def bulk_import_specimens(
                 site_id = None
                 site_obj = None
                 if row.site_name:
-                    site_obj = db.query(Site).filter(Site.name == row.site_name).first()
-                    if site_obj:
-                        site_id = site_obj.id
+                    site_obj, site_err = resolve_site_ref(db, row.site_name)
+                    if site_err:
+                        errors.append(f"Row {row_num} ({row.specimen_code}): {site_err}")
+                        continue
+                    site_id = site_obj.id
 
                 sample_type_id = None
                 if row.sample_type_name:

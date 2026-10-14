@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.exc import IntegrityError
 from ..dependencies import get_db, get_current_user, require_admin
-from ..crud.site import get_site, search_sites, get_all_sites, create_site, update_site, delete_site, get_site_by_name, validate_parent, descendant_ids, find_similar_sites, specimen_counts, merge_sites, backfill_hierarchy, sites_at_point, get_sites_for_export
+from ..crud.site import get_site, search_sites, get_all_sites, create_site, update_site, delete_site, get_site_by_name, resolve_site_ref, validate_parent, descendant_ids, find_similar_sites, specimen_counts, merge_sites, backfill_hierarchy, sites_at_point, get_sites_for_export
 from .. import geo
 from fastapi.responses import Response
 import json
@@ -18,6 +18,8 @@ from typing import List, Optional
 
 class SiteBulkImportRow(BaseModel):
     name: str
+    parent: Optional[str] = None  # name or 'A > B' path of an existing site (or one earlier in the file)
+    level: Optional[str] = None
     description: Optional[str] = None
     habitat_type: Optional[str] = None
     lat: Optional[float] = None
@@ -140,11 +142,20 @@ def bulk_import_sites(
             errors.append("Row skipped: name is required")
             continue
         try:
-            if get_site_by_name(db, row.name, any_parent=True):
+            parent_id = None
+            if row.parent and row.parent.strip():
+                parent, err = resolve_site_ref(db, row.parent)
+                if err:
+                    errors.append(f"{row.name}: parent {err}")
+                    continue
+                parent_id = parent.id
+            if get_site_by_name(db, row.name, parent_id):
                 skipped += 1
                 continue
             create_site(db, SiteCreate(
                 name=row.name,
+                parent_id=parent_id,
+                level=row.level,
                 description=row.description,
                 habitat_type=row.habitat_type,
                 lat=row.lat,

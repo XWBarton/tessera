@@ -3,7 +3,7 @@ from ..models.site import Site
 from ..models.specimen import Specimen
 from ..models.project import Project
 from ..schemas.site import SiteCreate, SiteUpdate
-from typing import Optional, List, Set, TYPE_CHECKING
+from typing import Optional, List, Set, Tuple, TYPE_CHECKING
 from difflib import SequenceMatcher
 import json
 import math
@@ -68,6 +68,28 @@ def get_site_by_name(db: Session, name: str, parent_id: Optional[int] = None, an
     if not any_parent:
         q = q.filter(Site.parent_id == parent_id) if parent_id is not None else q.filter(Site.parent_id.is_(None))
     return q.first()
+
+
+def resolve_site_ref(db: Session, ref: str) -> Tuple[Optional[Site], Optional[str]]:
+    """Find a site from a plain name or a '>'-separated path ('Victoria > Lakes Entrance > Jemmys Point').
+    Returns (site, None) on success or (None, error message) if nothing or several sites match."""
+    parts = [p.strip() for p in ref.split(">") if p.strip()]
+    if not parts:
+        return None, "empty site reference"
+    if len(parts) == 1:
+        matches = db.query(Site).filter(Site.name == parts[0]).all()
+        if len(matches) == 1:
+            return matches[0], None
+        if not matches:
+            return None, f"site '{ref}' not found"
+        paths = "; ".join(m.path for m in matches[:5])
+        return None, f"site name '{ref}' is ambiguous, use the full path (matches: {paths})"
+    node: Optional[Site] = None
+    for name in parts:
+        node = get_site_by_name(db, name, node.id if node else None)
+        if node is None:
+            return None, f"site '{ref}' not found"
+    return node, None
 
 
 def ancestor_ids(db: Session, site_id: Optional[int]) -> List[int]:

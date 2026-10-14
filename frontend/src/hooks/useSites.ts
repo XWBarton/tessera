@@ -3,7 +3,7 @@ import { getSites, createSite, updateSite, deleteSite, getSiteSpecimens, getSite
 import type { DuplicateCheckParams } from '../api/sites'
 import type { SiteCreate, SiteUpdate } from '../types'
 
-export const useSites = (params?: { q?: string; project_id?: number }) =>
+export const useSites = (params?: { q?: string; project_id?: number; limit?: number }) =>
   useQuery({
     queryKey: ['sites', params],
     queryFn: () => getSites(params),

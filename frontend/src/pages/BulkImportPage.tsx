@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import {
   Typography,
   Card,
@@ -11,12 +11,42 @@ import {
   Divider,
   Tabs,
   Tag,
+  Select,
 } from 'antd'
 import { UploadOutlined, DownloadOutlined } from '@ant-design/icons'
 import { bulkImportSpecimens } from '../api/specimens'
 import { bulkImportSites } from '../api/sites'
 import type { SiteBulkImportRow, SiteBulkImportResult } from '../api/sites'
-import type { BulkImportRow, BulkImportResult } from '../types'
+import type { BulkImportRow, BulkImportResult, Site } from '../types'
+import { useSites } from '../hooks/useSites'
+
+const NO_SITE = '__none__'
+
+/** Select of sites by full path, searchable. */
+function SitePathSelect({ sites, value, onChange, placeholder, allowNone }: {
+  sites: Site[]
+  value?: string
+  onChange: (v: string | undefined) => void
+  placeholder: string
+  allowNone?: boolean
+}) {
+  const options = [
+    ...(allowNone ? [{ value: NO_SITE, label: 'Import without a site' }] : []),
+    ...[...sites].sort((a, b) => a.path.localeCompare(b.path)).map((s) => ({ value: s.path, label: s.path })),
+  ]
+  return (
+    <Select
+      showSearch
+      allowClear
+      style={{ minWidth: 320 }}
+      placeholder={placeholder}
+      value={value}
+      onChange={onChange}
+      options={options}
+      optionFilterProp="label"
+    />
+  )
+}
 
 const TEMPLATE_COLUMNS = [
   'specimen_code',
@@ -71,6 +101,118 @@ function parseCsv(text: string): { headers: string[]; rows: string[][] } {
   return { headers, rows }
 }
 
+
+// ── Column mapping ─────────────────────────────────────────────────────────────
+
+interface FieldDef { key: string; label: string; required?: boolean; aliases?: string[] }
+
+const TUBE_FIELDS: FieldDef[] = [
+  { key: 'specimen_code', label: 'Specimen code', required: true, aliases: ['code', 'tubecode', 'tubeid', 'id'] },
+  { key: 'project_code', label: 'Project code', required: true, aliases: ['project'] },
+  { key: 'collection_date', label: 'Collection date', aliases: ['date', 'collected'] },
+  { key: 'collection_date_end', label: 'Collection date end', aliases: ['enddate', 'dateend'] },
+  { key: 'collector_name', label: 'Collector', aliases: ['collector', 'collectedby'] },
+  { key: 'site_name', label: 'Site', aliases: ['site', 'location', 'locality'] },
+  { key: 'sample_type_name', label: 'Sample type', aliases: ['sampletype', 'type'] },
+  { key: 'quantity_value', label: 'Quantity', aliases: ['quantity', 'qty', 'count'] },
+  { key: 'quantity_unit', label: 'Quantity unit', aliases: ['unit', 'units'] },
+  { key: 'notes', label: 'Notes', aliases: ['note', 'comments', 'comment'] },
+  { key: 'species', label: 'Species', aliases: ['taxa', 'taxon'] },
+]
+
+const SITE_FIELDS: FieldDef[] = [
+  { key: 'name', label: 'Name', required: true, aliases: ['site', 'sitename'] },
+  { key: 'parent', label: 'Parent', aliases: ['parentsite', 'parentpath', 'region'] },
+  { key: 'level', label: 'Level', aliases: ['type', 'rank'] },
+  { key: 'description', label: 'Description', aliases: ['desc'] },
+  { key: 'habitat_type', label: 'Habitat', aliases: ['habitat'] },
+  { key: 'lat', label: 'Latitude', aliases: ['latitude'] },
+  { key: 'lon', label: 'Longitude', aliases: ['long', 'lng', 'longitude'] },
+  { key: 'notes', label: 'Notes', aliases: ['note', 'comments'] },
+]
+
+const norm = (v: string) => v.toLowerCase().replace(/[^a-z0-9]/g, '')
+
+/** Best-guess mapping of each field to a CSV column index (exact name, label or alias, ignoring case/punctuation). */
+function guessMapping(fields: FieldDef[], headers: string[]): Record<string, number | undefined> {
+  const normHeaders = headers.map(norm)
+  const used = new Set<number>()
+  const out: Record<string, number | undefined> = {}
+  for (const f of fields) {
+    const candidates = [f.key, f.label, ...(f.aliases ?? [])].map(norm)
+    const idx = normHeaders.findIndex((h, i) => !used.has(i) && candidates.includes(h))
+    if (idx >= 0) { out[f.key] = idx; used.add(idx) }
+  }
+  return out
+}
+
+/** Rename CSV headers to the field keys they are mapped to, so the row builders can read them by key. */
+function remapHeaders(headers: string[], mapping: Record<string, number | undefined>): string[] {
+  const out = headers.map(() => '')
+  Object.entries(mapping).forEach(([key, idx]) => { if (idx != null) out[idx] = key })
+  return out
+}
+
+function ColumnMapper({ fields, headers, mapping, onChange }: {
+  fields: FieldDef[]
+  headers: string[]
+  mapping: Record<string, number | undefined>
+  onChange: (m: Record<string, number | undefined>) => void
+}) {
+  const options = headers.map((h, i) => ({ value: i, label: h || `(column ${i + 1})` }))
+  const missing = fields.filter((f) => f.required && mapping[f.key] == null)
+  return (
+    <Card size="small" title="Match your columns" style={{ marginBottom: 16 }}>
+      <Typography.Paragraph type="secondary" style={{ fontSize: 13 }}>
+        Choose which column in your file holds each field. Columns with matching names are picked automatically;
+        leave a field blank to skip it.
+      </Typography.Paragraph>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '10px 16px' }}>
+        {fields.map((f) => (
+          <div key={f.key}>
+            <div style={{ fontSize: 12, color: '#555', marginBottom: 2 }}>
+              {f.label}{f.required && <span style={{ color: '#cf1322' }}> *</span>}
+            </div>
+            <Select
+              allowClear
+              showSearch
+              optionFilterProp="label"
+              style={{ width: '100%' }}
+              placeholder="— not in file —"
+              status={f.required && mapping[f.key] == null ? 'error' : undefined}
+              value={mapping[f.key]}
+              options={options}
+              onChange={(v) => onChange({ ...mapping, [f.key]: v ?? undefined })}
+            />
+          </div>
+        ))}
+      </div>
+      {missing.length > 0 && (
+        <Alert
+          type="warning"
+          showIcon
+          style={{ marginTop: 12 }}
+          message={`Required: ${missing.map((f) => f.label).join(', ')}`}
+        />
+      )}
+    </Card>
+  )
+}
+
+/** Holds an uploaded CSV and the column mapping chosen for it. */
+function useCsvMapping(fields: FieldDef[]) {
+  const [csv, setCsv] = useState<{ headers: string[]; rows: string[][] } | null>(null)
+  const [mapping, setMapping] = useState<Record<string, number | undefined>>({})
+  const load = (text: string) => {
+    const parsedCsv = parseCsv(text)
+    setCsv(parsedCsv)
+    setMapping(guessMapping(fields, parsedCsv.headers))
+  }
+  const clear = () => { setCsv(null); setMapping({}) }
+  const headers = csv ? remapHeaders(csv.headers, mapping) : []
+  return { csv, mapping, setMapping, load, clear, headers }
+}
+
 function rowsToImport(headers: string[], rows: string[][]): BulkImportRow[] {
   return rows.map((cols) => {
     const obj: Record<string, string> = {}
@@ -96,6 +238,7 @@ const previewColumns = [
   { title: 'Project', dataIndex: 'project_code', key: 'project_code' },
   { title: 'Date', dataIndex: 'collection_date', key: 'collection_date', render: (v: string) => v || '—' },
   { title: 'Collector', dataIndex: 'collector_name', key: 'collector_name', render: (v: string) => v || '—' },
+  { title: 'Site', dataIndex: 'site_name', key: 'site_name', render: (v: string) => v || '—' },
   { title: 'Sample Type', dataIndex: 'sample_type_name', key: 'sample_type_name', render: (v: string) => v || '—' },
   { title: 'Qty', key: 'qty', render: (_: unknown, r: BulkImportRow) => r.quantity_value != null ? `${r.quantity_value} ${r.quantity_unit || ''}` : '—' },
   {
@@ -129,9 +272,8 @@ const fieldStyle: React.CSSProperties = {
 
 // ── Sites bulk import ──────────────────────────────────────────────────────────
 
-const SITE_TEMPLATE_COLUMNS = ['name', 'description', 'habitat_type', 'lat', 'lon', 'precision', 'notes']
-const SITE_TEMPLATE_EXAMPLE = ['Wetland A', 'Main wetland site', 'Wetland', '-31.5377', '115.6702', 'GPS', '']
-const SITE_PRECISION_VALUES = ['GPS', 'Suburb', 'City', 'Region', 'State']
+const SITE_TEMPLATE_COLUMNS = ['name', 'parent', 'level', 'description', 'habitat_type', 'lat', 'lon', 'notes']
+const SITE_TEMPLATE_EXAMPLE = ['Wetland A', 'Australia > Western Australia', 'Locality', 'Main wetland site', 'Wetland', '-31.5377', '115.6702', '']
 
 function rowsToSiteImport(headers: string[], rows: string[][]): SiteBulkImportRow[] {
   return rows.map((cols) => {
@@ -139,11 +281,12 @@ function rowsToSiteImport(headers: string[], rows: string[][]): SiteBulkImportRo
     headers.forEach((h, i) => { obj[h.trim()] = (cols[i] ?? '').trim() })
     return {
       name: obj.name || '',
+      parent: obj.parent || undefined,
+      level: obj.level || undefined,
       description: obj.description || undefined,
       habitat_type: obj.habitat_type || undefined,
       lat: obj.lat ? parseFloat(obj.lat) : undefined,
       lon: obj.lon ? parseFloat(obj.lon) : undefined,
-      precision: obj.precision || undefined,
       notes: obj.notes || undefined,
     }
   }).filter((r) => r.name)
@@ -151,18 +294,27 @@ function rowsToSiteImport(headers: string[], rows: string[][]): SiteBulkImportRo
 
 const sitePreviewColumns = [
   { title: 'Name', dataIndex: 'name', key: 'name' },
+  { title: 'Parent', dataIndex: 'parent', key: 'parent', render: (v: string) => v || '—' },
+  { title: 'Level', dataIndex: 'level', key: 'level', render: (v: string) => v || '—' },
   { title: 'Description', dataIndex: 'description', key: 'description', render: (v: string) => v || '—' },
   { title: 'Habitat', dataIndex: 'habitat_type', key: 'habitat_type', render: (v: string) => v ? <Tag>{v}</Tag> : '—' },
   { title: 'Lat', dataIndex: 'lat', key: 'lat', render: (v: number) => v ?? '—' },
   { title: 'Lon', dataIndex: 'lon', key: 'lon', render: (v: number) => v ?? '—' },
-  { title: 'Precision', dataIndex: 'precision', key: 'precision', render: (v: string) => v || '—' },
   { title: 'Notes', dataIndex: 'notes', key: 'notes', ellipsis: true, render: (v: string) => v || '—' },
 ]
 
 function SitesBulkImport() {
-  const [parsed, setParsed] = useState<SiteBulkImportRow[]>([])
+  const cm = useCsvMapping(SITE_FIELDS)
+  const parsed = useMemo(() => (cm.csv ? rowsToSiteImport(cm.headers, cm.csv.rows) : []), [cm.csv, cm.mapping]) // eslint-disable-line react-hooks/exhaustive-deps
   const [importing, setImporting] = useState(false)
   const [result, setResult] = useState<SiteBulkImportResult | null>(null)
+  const [defaultParent, setDefaultParent] = useState<string | undefined>()
+  const { data: allSites = [] } = useSites({ limit: 5000 })
+  const withParent = useMemo(
+    () => parsed.map((r) => ({ ...r, parent: r.parent || defaultParent })),
+    [parsed, defaultParent],
+  )
+  const noParentCount = parsed.filter((r) => !r.parent).length
 
   const downloadTemplate = () => {
     const header = SITE_TEMPLATE_COLUMNS.join(',')
@@ -177,10 +329,8 @@ function SitesBulkImport() {
     const reader = new FileReader()
     reader.onload = (e) => {
       try {
-        const { headers, rows } = parseCsv(e.target?.result as string)
-        const importRows = rowsToSiteImport(headers, rows)
-        if (importRows.length === 0) { message.warning('No valid rows found. Make sure the CSV has a name column.'); return }
-        setParsed(importRows)
+        cm.load(e.target?.result as string)
+        setDefaultParent(undefined)
         setResult(null)
       } catch { message.error('Failed to parse CSV') }
     }
@@ -192,10 +342,10 @@ function SitesBulkImport() {
     if (!parsed.length) return
     setImporting(true)
     try {
-      const res = await bulkImportSites(parsed)
+      const res = await bulkImportSites(withParent)
       setResult(res)
       if (res.created > 0) message.success(`${res.created} site${res.created !== 1 ? 's' : ''} imported`)
-      if (res.errors.length === 0) setParsed([])
+      if (res.errors.length === 0) cm.clear()
     } catch { message.error('Import failed') }
     finally { setImporting(false) }
   }
@@ -205,7 +355,7 @@ function SitesBulkImport() {
       <Card style={{ marginBottom: 16 }}>
         <Typography.Paragraph style={{ marginBottom: 16 }}>
           Upload a CSV to create multiple sites at once. Rows whose <strong>name</strong> already exists
-          are skipped (not updated). Coordinates should be decimal degrees (WGS 84).
+          under the same parent are skipped (not updated). Parents must exist already or appear earlier in the file. Coordinates should be decimal degrees (WGS 84).
         </Typography.Paragraph>
 
         <Divider orientation="left" orientationMargin={0} style={{ fontSize: 13, marginTop: 0, marginBottom: 12 }}>
@@ -213,15 +363,17 @@ function SitesBulkImport() {
         </Divider>
         <div style={fieldStyle}>
           <span style={{ color: '#555', fontWeight: 500 }}>name</span>
-          <span><strong>Required.</strong> Must be unique — duplicates are skipped.</span>
+          <span><strong>Required.</strong> Must be unique among sites with the same parent — duplicates are skipped.</span>
+
+          <span style={{ color: '#555', fontWeight: 500 }}>parent</span>
+          <span>Optional. Name or full path of the parent, e.g. <code>Australia &gt; Western Australia</code>. Blank = top level. Use the path if the name is not unique.</span>
+
+          <span style={{ color: '#555', fontWeight: 500 }}>level</span>
+          <span>Optional free text, e.g. <code>Country</code>, <code>State</code>, <code>Locality</code>.</span>
 
           <span style={{ color: '#555', fontWeight: 500 }}>lat / lon</span>
           <span>Decimal degrees, e.g. <code>-31.5377</code> / <code>115.6702</code></span>
 
-          <span style={{ color: '#555', fontWeight: 500 }}>precision</span>
-          <span>
-            {SITE_PRECISION_VALUES.map((v) => <code key={v} style={{ marginRight: 4 }}>{v}</code>)}
-          </span>
         </div>
         <div style={{ marginTop: 16 }}>
           <Button icon={<DownloadOutlined />} onClick={downloadTemplate}>Download Template</Button>
@@ -236,6 +388,17 @@ function SitesBulkImport() {
         </Upload.Dragger>
       </Card>
 
+      {cm.csv && <ColumnMapper fields={SITE_FIELDS} headers={cm.csv.headers} mapping={cm.mapping} onChange={cm.setMapping} />}
+
+      {parsed.length > 0 && noParentCount > 0 && (
+        <Card size="small" style={{ marginBottom: 16 }}>
+          <Space wrap>
+            <span>{noParentCount} row{noParentCount !== 1 ? 's have' : ' has'} no parent. Put them under:</span>
+            <SitePathSelect sites={allSites} value={defaultParent} onChange={setDefaultParent} placeholder="Top level (no parent)" />
+          </Space>
+        </Card>
+      )}
+
       {parsed.length > 0 && (
         <Card
           title={`Preview — ${parsed.length} row${parsed.length !== 1 ? 's' : ''}`}
@@ -246,7 +409,7 @@ function SitesBulkImport() {
             </Button>
           }
         >
-          <Table dataSource={parsed} columns={sitePreviewColumns} rowKey="name" size="small" pagination={{ pageSize: 20 }} scroll={{ x: true }} />
+          <Table dataSource={withParent} columns={sitePreviewColumns} rowKey={(r) => `${r.parent ?? ''}>${r.name}`} size="small" pagination={{ pageSize: 20 }} scroll={{ x: true }} />
         </Card>
       )}
 
@@ -271,9 +434,29 @@ function SitesBulkImport() {
 // ── Page ───────────────────────────────────────────────────────────────────────
 
 export default function BulkImportPage() {
-  const [parsed, setParsed] = useState<BulkImportRow[]>([])
+  const cm = useCsvMapping(TUBE_FIELDS)
+  const parsed = useMemo(() => (cm.csv ? rowsToImport(cm.headers, cm.csv.rows) : []), [cm.csv, cm.mapping]) // eslint-disable-line react-hooks/exhaustive-deps
   const [importing, setImporting] = useState(false)
   const [result, setResult] = useState<BulkImportResult | null>(null)
+  const [siteChoice, setSiteChoice] = useState<Record<string, string | undefined>>({})
+  const { data: allSites = [] } = useSites({ limit: 5000 })
+
+  // Check each distinct site_name in the file against the database
+  const siteIssues = useMemo(() => {
+    const names = [...new Set(parsed.map((r) => r.site_name).filter((n): n is string => !!n))]
+    return names.flatMap((name) => {
+      const parts = name.split('>').map((p) => p.trim()).filter(Boolean)
+      const matches = parts.length > 1
+        ? allSites.filter((s) => s.path.split('>').map((p) => p.trim()).join(' > ') === parts.join(' > '))
+        : allSites.filter((s) => s.name === name)
+      return matches.length === 1 ? [] : [{ name, matches }]
+    })
+  }, [parsed, allSites])
+  const unresolved = siteIssues.filter((i) => !siteChoice[i.name])
+  const resolvedRows = useMemo(() => parsed.map((r) => {
+    const c = r.site_name ? siteChoice[r.site_name] : undefined
+    return c ? { ...r, site_name: c === NO_SITE ? undefined : c } : r
+  }), [parsed, siteChoice])
 
   const downloadTemplate = () => {
     const header = TEMPLATE_COLUMNS.join(',')
@@ -292,14 +475,8 @@ export default function BulkImportPage() {
     const reader = new FileReader()
     reader.onload = (e) => {
       try {
-        const text = e.target?.result as string
-        const { headers, rows } = parseCsv(text)
-        const importRows = rowsToImport(headers, rows)
-        if (importRows.length === 0) {
-          message.warning('No valid rows found. Make sure the CSV has specimen_code and project_code columns.')
-          return
-        }
-        setParsed(importRows)
+        cm.load(e.target?.result as string)
+        setSiteChoice({})
         setResult(null)
       } catch {
         message.error('Failed to parse CSV')
@@ -313,13 +490,13 @@ export default function BulkImportPage() {
     if (parsed.length === 0) return
     setImporting(true)
     try {
-      const res = await bulkImportSpecimens(parsed)
+      const res = await bulkImportSpecimens(resolvedRows)
       setResult(res)
       if (res.created > 0) {
         message.success(`${res.created} tube${res.created !== 1 ? 's' : ''} imported`)
       }
       if (res.errors.length === 0) {
-        setParsed([])
+        cm.clear()
       }
     } catch {
       message.error('Import failed')
@@ -356,7 +533,10 @@ export default function BulkImportPage() {
           <span>Matched by name against the database (case-sensitive).</span>
 
           <span style={{ color: '#555', fontWeight: 500 }}>site_name</span>
-          <span>Matched by name against the database (case-sensitive).</span>
+          <span>
+            Site name, or full path such as <code>Victoria &gt; Lakes Entrance &gt; Jemmys Point</code> (case-sensitive).
+            Use the path when the name exists in more than one place. Unknown or ambiguous sites fail the row.
+          </span>
 
           <span style={{ color: '#555', fontWeight: 500 }}>species</span>
           <span>
@@ -397,18 +577,48 @@ export default function BulkImportPage() {
         </Space>
       </Card>
 
+      {cm.csv && <ColumnMapper fields={TUBE_FIELDS} headers={cm.csv.headers} mapping={cm.mapping} onChange={cm.setMapping} />}
+
+      {siteIssues.length > 0 && (
+        <Card
+          size="small"
+          title="Sites to resolve"
+          style={{ marginBottom: 16 }}
+        >
+          <Typography.Paragraph type="secondary" style={{ fontSize: 13 }}>
+            These site names are not found, or match more than one site. Pick the right site for each.
+          </Typography.Paragraph>
+          <Space direction="vertical" style={{ width: '100%' }}>
+            {siteIssues.map(({ name, matches }) => (
+              <Space key={name} wrap>
+                <Tag color={matches.length ? 'orange' : 'red'}>{matches.length ? 'Ambiguous' : 'Not found'}</Tag>
+                <code>{name}</code>
+                <span>({parsed.filter((r) => r.site_name === name).length} rows) →</span>
+                <SitePathSelect
+                  sites={matches.length ? matches : allSites}
+                  value={siteChoice[name]}
+                  onChange={(v) => setSiteChoice((prev) => ({ ...prev, [name]: v }))}
+                  placeholder="Choose site"
+                  allowNone
+                />
+              </Space>
+            ))}
+          </Space>
+        </Card>
+      )}
+
       {parsed.length > 0 && (
         <Card
           title={`Preview — ${parsed.length} row${parsed.length !== 1 ? 's' : ''}`}
           style={{ marginBottom: 16 }}
           extra={
-            <Button type="primary" loading={importing} onClick={handleImport}>
+            <Button type="primary" loading={importing} disabled={unresolved.length > 0} onClick={handleImport}>
               Import {parsed.length} Tube{parsed.length !== 1 ? 's' : ''}
             </Button>
           }
         >
           <Table
-            dataSource={parsed}
+            dataSource={resolvedRows}
             columns={previewColumns}
             rowKey="specimen_code"
             size="small"
