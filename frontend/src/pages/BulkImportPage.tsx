@@ -12,8 +12,9 @@ import {
   Tabs,
   Tag,
   Select,
+  Input,
 } from 'antd'
-import { UploadOutlined, DownloadOutlined } from '@ant-design/icons'
+import { UploadOutlined, DownloadOutlined, PlusOutlined, DeleteOutlined } from '@ant-design/icons'
 import { bulkImportSpecimens } from '../api/specimens'
 import { bulkImportSites } from '../api/sites'
 import type { SiteBulkImportRow, SiteBulkImportResult } from '../api/sites'
@@ -293,15 +294,35 @@ function rowsToSiteImport(headers: string[], rows: string[][]): SiteBulkImportRo
 }
 
 const sitePreviewColumns = [
-  { title: 'Name', dataIndex: 'name', key: 'name' },
-  { title: 'Parent', dataIndex: 'parent', key: 'parent', render: (v: string) => v || '—' },
   { title: 'Level', dataIndex: 'level', key: 'level', render: (v: string) => v || '—' },
-  { title: 'Description', dataIndex: 'description', key: 'description', render: (v: string) => v || '—' },
+  { title: 'Description', dataIndex: 'description', key: 'description', ellipsis: true, render: (v: string) => v || '—' },
   { title: 'Habitat', dataIndex: 'habitat_type', key: 'habitat_type', render: (v: string) => v ? <Tag>{v}</Tag> : '—' },
   { title: 'Lat', dataIndex: 'lat', key: 'lat', render: (v: number) => v ?? '—' },
   { title: 'Lon', dataIndex: 'lon', key: 'lon', render: (v: number) => v ?? '—' },
   { title: 'Notes', dataIndex: 'notes', key: 'notes', ellipsis: true, render: (v: string) => v || '—' },
 ]
+
+type SiteImportRow = SiteBulkImportRow & { key: string; isNew?: boolean }
+
+const rowPath = (r: { name: string; parent?: string }) => (r.parent ? `${r.parent} > ${r.name}` : r.name)
+
+/** Dropdown footer for typing the name of a brand-new parent site. */
+function NewParentInput({ onAdd }: { onAdd: (name: string) => void }) {
+  const [name, setName] = useState('')
+  const add = () => { if (name.trim()) { onAdd(name.trim()); setName('') } }
+  return (
+    <Space.Compact style={{ width: '100%', padding: 8 }}>
+      <Input
+        size="small"
+        placeholder="New parent name"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter') add() }}
+      />
+      <Button size="small" type="primary" icon={<PlusOutlined />} onClick={add}>Create</Button>
+    </Space.Compact>
+  )
+}
 
 function SitesBulkImport() {
   const cm = useCsvMapping(SITE_FIELDS)
@@ -310,9 +331,118 @@ function SitesBulkImport() {
   const [result, setResult] = useState<SiteBulkImportResult | null>(null)
   const [defaultParent, setDefaultParent] = useState<string | undefined>()
   const { data: allSites = [] } = useSites({ limit: 5000 })
-  const withParent = useMemo(
-    () => parsed.map((r) => ({ ...r, parent: r.parent || defaultParent })),
-    [parsed, defaultParent],
+  const [overrides, setOverrides] = useState<Record<string, string | null>>({})
+  const [extras, setExtras] = useState<SiteImportRow[]>([])
+  const rows: SiteImportRow[] = useMemo(() => {
+    const base: SiteImportRow[] = [...parsed.map((r, i) => ({ ...r, key: `p${i}` })), ...extras]
+    return base.map((r) => ({
+      ...r,
+      parent: r.key in overrides ? (overrides[r.key] ?? undefined) : (r.parent || defaultParent),
+    }))
+  }, [parsed, extras, overrides, defaultParent])
+
+  // Re-point rows beneath oldPath at newPath (or to the top level when newPath is null)
+  const rewriteChildren = (oldPath: string, newPath: string | null, skipKey: string, into: Record<string, string | null>) => {
+    rows.forEach((r) => {
+      if (r.key === skipKey || !r.parent) return
+      if (r.parent === oldPath) into[r.key] = newPath
+      else if (r.parent.startsWith(oldPath + ' > ')) {
+        const rest = r.parent.slice(oldPath.length + 3)
+        into[r.key] = newPath ? `${newPath} > ${rest}` : rest
+      }
+    })
+  }
+
+  const setParent = (row: SiteImportRow, parent: string | null) => {
+    const next = { ...overrides, [row.key]: parent }
+    rewriteChildren(rowPath(row), parent ? `${parent} > ${row.name}` : row.name, row.key, next)
+    setOverrides(next)
+  }
+
+  const addNewParent = (forRow: SiteImportRow, name: string) => {
+    const key = `x${Date.now()}`
+    setExtras((prev) => [...prev, { key, name, level: 'Parent', isNew: true }])
+    setOverrides((prev) => {
+      const next = { ...prev, [key]: null }
+      next[forRow.key] = name
+      rewriteChildren(rowPath(forRow), `${name} > ${forRow.name}`, forRow.key, next)
+      return next
+    })
+  }
+
+  const removeNewParent = (row: SiteImportRow) => {
+    const next = { ...overrides }
+    delete next[row.key]
+    rewriteChildren(rowPath(row), null, row.key, next)
+    setOverrides(next)
+    setExtras((prev) => prev.filter((e) => e.key !== row.key))
+  }
+
+  const parentOptions = (row: SiteImportRow) => {
+    const own = rowPath(row)
+    const inFile = rows
+      .map(rowPath)
+      .filter((pth) => pth !== own && !pth.startsWith(own + ' > '))
+    return [
+      { label: 'In this file', options: [...new Set(inFile)].map((pth) => ({ value: pth, label: pth })) },
+      { label: 'Existing sites', options: [...allSites].sort((x, y) => x.path.localeCompare(y.path)).map((x) => ({ value: x.path, label: x.path })) },
+    ]
+  }
+
+  const columns = [
+    {
+      title: 'Name',
+      key: 'name',
+      render: (_: unknown, r: SiteImportRow) => (
+        <Space size={4}>
+          {r.name}
+          {r.isNew && <Tag color="green" style={{ marginInlineEnd: 0 }}>new</Tag>}
+        </Space>
+      ),
+    },
+    {
+      title: 'Parent',
+      key: 'parent',
+      width: 340,
+      render: (_: unknown, r: SiteImportRow) => (
+        <Select
+          size="small"
+          showSearch
+          allowClear
+          style={{ width: '100%' }}
+          placeholder="Top level"
+          value={r.parent}
+          options={parentOptions(r)}
+          optionFilterProp="label"
+          onChange={(v) => setParent(r, v ?? null)}
+          popupRender={(menu) => (
+            <>
+              {menu}
+              <Divider style={{ margin: 0 }} />
+              <NewParentInput onAdd={(name) => addNewParent(r, name)} />
+            </>
+          )}
+        />
+      ),
+    },
+    ...sitePreviewColumns,
+    {
+      title: '',
+      key: 'remove',
+      width: 40,
+      render: (_: unknown, r: SiteImportRow) => r.isNew
+        ? <Button size="small" type="text" danger icon={<DeleteOutlined />} onClick={() => removeNewParent(r)} />
+        : null,
+    },
+  ]
+
+  // Parents are created before their children, so sort shallowest first
+  const importRows = useMemo(
+    () => rows
+      .map((r, i) => ({ r, i, depth: rowPath(r).split(' > ').length }))
+      .sort((x, y) => x.depth - y.depth || x.i - y.i)
+      .map(({ r }) => ({ name: r.name, parent: r.parent, level: r.level, description: r.description, habitat_type: r.habitat_type, lat: r.lat, lon: r.lon, precision: r.precision, notes: r.notes })),
+    [rows],
   )
   const noParentCount = parsed.filter((r) => !r.parent).length
 
@@ -331,6 +461,8 @@ function SitesBulkImport() {
       try {
         cm.load(e.target?.result as string)
         setDefaultParent(undefined)
+        setOverrides({})
+        setExtras([])
         setResult(null)
       } catch { message.error('Failed to parse CSV') }
     }
@@ -342,7 +474,7 @@ function SitesBulkImport() {
     if (!parsed.length) return
     setImporting(true)
     try {
-      const res = await bulkImportSites(withParent)
+      const res = await bulkImportSites(importRows)
       setResult(res)
       if (res.created > 0) message.success(`${res.created} site${res.created !== 1 ? 's' : ''} imported`)
       if (res.errors.length === 0) cm.clear()
@@ -401,15 +533,15 @@ function SitesBulkImport() {
 
       {parsed.length > 0 && (
         <Card
-          title={`Preview — ${parsed.length} row${parsed.length !== 1 ? 's' : ''}`}
+          title={`Preview — ${rows.length} row${rows.length !== 1 ? 's' : ''}`}
           style={{ marginBottom: 16 }}
           extra={
             <Button type="primary" loading={importing} onClick={handleImport}>
-              Import {parsed.length} Site{parsed.length !== 1 ? 's' : ''}
+              Import {rows.length} Site{rows.length !== 1 ? 's' : ''}
             </Button>
           }
         >
-          <Table dataSource={withParent} columns={sitePreviewColumns} rowKey={(r) => `${r.parent ?? ''}>${r.name}`} size="small" pagination={{ pageSize: 20 }} scroll={{ x: true }} />
+          <Table dataSource={rows} columns={columns} rowKey="key" size="small" pagination={{ pageSize: 20 }} scroll={{ x: true }} />
         </Card>
       )}
 
