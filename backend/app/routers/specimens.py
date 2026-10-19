@@ -287,6 +287,37 @@ def list_specimens(
     return {"items": serialized, "total": total, "skip": skip, "limit": limit}
 
 
+def _duplicate_code_detail(db: Session, code, project_id, exclude_id=None) -> str:
+    """Explain which unique constraint an IntegrityError on a tube code hit."""
+    import re
+    from ..models.specimen import Specimen as SpecimenModel
+    from ..models.project import Project as ProjectModel
+    db.rollback()
+    if not code:
+        return "Could not save tube: a unique constraint was violated"
+    q = db.query(SpecimenModel).filter(SpecimenModel.specimen_code == code)
+    if exclude_id:
+        q = q.filter(SpecimenModel.id != exclude_id)
+    if q.first():
+        return f"Tube code '{code}' already exists"
+    project = db.get(ProjectModel, project_id) if project_id else None
+    m = re.match(rf"^{re.escape(project.code)}-(\d+)$", code) if project else None
+    if m:
+        q = db.query(SpecimenModel).filter(
+            SpecimenModel.project_id == project.id,
+            SpecimenModel.sequence_number == int(m.group(1)),
+        )
+        if exclude_id:
+            q = q.filter(SpecimenModel.id != exclude_id)
+        clash = q.first()
+        if clash:
+            return (
+                f"Tube code '{code}' clashes with existing tube '{clash.specimen_code}' "
+                f"(both use number {int(m.group(1))} in project {project.code})"
+            )
+    return f"Tube code '{code}' conflicts with an existing tube"
+
+
 @router.post("/", response_model=SpecimenDetail)
 def create_new_specimen(
     specimen: SpecimenCreate,
@@ -305,7 +336,10 @@ def create_new_specimen(
             reservation_id=specimen.reservation_id,
         )
     except IntegrityError:
-        raise HTTPException(status_code=400, detail=f"Tube code '{specimen.specimen_code}' already exists")
+        raise HTTPException(
+            status_code=400,
+            detail=_duplicate_code_detail(db, specimen.specimen_code, specimen.project_id),
+        )
 
 
 @router.get("/find-by-code")
@@ -548,7 +582,13 @@ def update_existing_specimen(
     try:
         return update_specimen(db, specimen, specimen_update)
     except IntegrityError:
-        raise HTTPException(status_code=400, detail=f"Tube code '{specimen_update.specimen_code}' already exists")
+        raise HTTPException(
+            status_code=400,
+            detail=_duplicate_code_detail(
+                db, specimen_update.specimen_code or specimen.specimen_code,
+                specimen_update.project_id or specimen.project_id, exclude_id=specimen_id,
+            ),
+        )
 
 
 @router.delete("/{specimen_id}")
