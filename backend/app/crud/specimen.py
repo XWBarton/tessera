@@ -202,6 +202,23 @@ def release_reservation(db: Session, reservation_id: int, project_id: int) -> No
     db.commit()
 
 
+def _sequence_for_code(db: Session, project: Project, code: str) -> int:
+    # If the custom code matches the project format (e.g. XPG-000), parse
+    # the sequence number directly so the auto-counter stays consistent.
+    m = re.match(rf"^{re.escape(project.code)}-(\d+)$", code)
+    if m:
+        return int(m.group(1))
+    # Non-matching format: use a unique negative value so it never
+    # interferes with the positive auto-generated sequence.
+    min_seq = (
+        db.query(func.min(Specimen.sequence_number))
+        .filter(Specimen.project_id == project.id)
+        .filter(Specimen.sequence_number < 0)
+        .scalar()
+    ) or 0
+    return min_seq - 1
+
+
 def _create_specimen_attempt(
     db: Session,
     specimen_data: SpecimenCreate,
@@ -212,21 +229,7 @@ def _create_specimen_attempt(
 ) -> Specimen:
     if specimen_data.specimen_code:
         code = specimen_data.specimen_code
-        # If the custom code matches the project format (e.g. XPG-000), parse
-        # the sequence number directly so the auto-counter stays consistent.
-        m = re.match(rf"^{re.escape(project.code)}-(\d+)$", code)
-        if m:
-            seq_number = int(m.group(1))
-        else:
-            # Non-matching format: use a unique negative value so it never
-            # interferes with the positive auto-generated sequence.
-            min_seq = (
-                db.query(func.min(Specimen.sequence_number))
-                .filter(Specimen.project_id == project.id)
-                .filter(Specimen.sequence_number < 0)
-                .scalar()
-            ) or 0
-            seq_number = min_seq - 1
+        seq_number = _sequence_for_code(db, project, code)
     elif reserved_sequence is not None and reserved_code is not None:
         # Consuming a held reservation — use its exact sequence/code rather
         # than recomputing MAX+1 (which is what the reservation exists to avoid).
@@ -392,8 +395,19 @@ def update_specimen(
         elif new_qty is not None:
             update_data["quantity_remaining"] = new_qty
 
+    identity_changed = (
+        update_data.get("specimen_code", specimen.specimen_code) != specimen.specimen_code
+        or update_data.get("project_id", specimen.project_id) != specimen.project_id
+    )
     for field, value in update_data.items():
         setattr(specimen, field, value)
+
+    # Keep the sequence number in step with the code, otherwise the old number
+    # stays reserved and blocks reusing it.
+    if identity_changed:
+        project = db.get(Project, specimen.project_id)
+        if project:
+            specimen.sequence_number = _sequence_for_code(db, project, specimen.specimen_code)
 
     if specimen_update.hosts is not None:
         _apply_hosts(specimen, specimen_update.hosts)
