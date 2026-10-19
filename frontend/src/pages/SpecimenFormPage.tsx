@@ -380,10 +380,9 @@ export default function SpecimenFormPage() {
               style={{ marginBottom: 16 }}
               message={
                 <span>
-                  This tube will be <strong>{reservation.next_code}</strong>. Write this on the tube.
+                  This tube will be <strong>{reservation.next_code}</strong>
                 </span>
               }
-              description="This code is reserved for you — nobody else will be assigned it while this form is open. The hold is released automatically if you navigate away without saving."
             />
           )}
 
