@@ -1,7 +1,8 @@
-import React, { useState, useMemo, type ReactNode } from 'react'
+import React, { useState, useMemo, useEffect, type ReactNode } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import {
   Row, Col, Card, Statistic, Typography, Spin,
-  Button, Drawer, Checkbox, Table, Tag, Progress,
+  Button, Drawer, Checkbox, Table, Tag, Progress, Image, Empty,
 } from 'antd'
 import {
   ExperimentOutlined, ProjectOutlined, TeamOutlined, CalendarOutlined,
@@ -22,7 +23,8 @@ import SpecimensBySite from '../components/charts/SpecimensBySite'
 import SpecimensByFamily from '../components/charts/SpecimensByFamily'
 import SampleTypeSplit from '../components/charts/SampleTypeSplit'
 import StorageUsageChart from '../components/charts/StorageUsageChart'
-import type { Specimen } from '../types'
+import { getRecentPhotos, getPhotoBlob } from '../api/specimens'
+import type { Specimen, GalleryPhoto } from '../types'
 
 // ── Widget registry ────────────────────────────────────────────────────────
 
@@ -30,7 +32,7 @@ type WidgetKey =
   | 'stat_total_tubes' | 'stat_total_individuals' | 'stat_projects' | 'stat_team' | 'stat_this_month'
   | 'chart_by_project' | 'chart_by_site' | 'chart_by_collector' | 'chart_by_month' | 'chart_by_species'
   | 'chart_by_family' | 'chart_sample_type' | 'chart_leaderboard' | 'chart_storage'
-  | 'list_recent' | 'list_low_qty'
+  | 'list_recent' | 'list_low_qty' | 'gallery_photos'
 
 interface WidgetDef { key: WidgetKey; title: string; type: 'stat' | 'half' | 'full'; group: string }
 
@@ -51,6 +53,7 @@ const WIDGETS: WidgetDef[] = [
   { key: 'chart_storage',          title: 'Storage Usage',         type: 'half', group: 'Charts' },
   { key: 'list_recent',            title: 'Recent Additions',      type: 'full', group: 'Lists' },
   { key: 'list_low_qty',           title: 'Low Quantity Alerts',   type: 'full', group: 'Lists' },
+  { key: 'gallery_photos',         title: 'Photo Gallery',         type: 'full', group: 'Lists' },
 ]
 
 const STORAGE_KEY = 'tessera_dashboard_widgets'
@@ -175,6 +178,54 @@ function LowQuantityAlerts({ specimens }: { specimens: Specimen[] }) {
   )
 }
 
+function GalleryTile({ photo }: { photo: GalleryPhoto }) {
+  const navigate = useNavigate()
+  const [url, setUrl] = useState<string>()
+  useEffect(() => {
+    let objectUrl: string | undefined
+    let cancelled = false
+    getPhotoBlob(photo.specimen_id, photo.id)
+      .then((u) => { if (cancelled) URL.revokeObjectURL(u); else { objectUrl = u; setUrl(u) } })
+      .catch(() => { /* leave placeholder */ })
+    return () => { cancelled = true; if (objectUrl) URL.revokeObjectURL(objectUrl) }
+  }, [photo.specimen_id, photo.id])
+
+  return (
+    <div style={{ width: 140 }}>
+      <div style={{ width: 140, height: 140, background: '#f5f5f5', borderRadius: 6, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        {url ? (
+          <Image src={url} width={140} height={140} style={{ objectFit: 'cover' }} alt={photo.caption || photo.specimen_code} />
+        ) : <Spin size="small" />}
+      </div>
+      <Typography.Link
+        onClick={() => navigate(`/specimens/${photo.specimen_id}`)}
+        style={{ display: 'block', marginTop: 4, fontSize: 12, fontWeight: 600 }}
+      >
+        {photo.specimen_code}
+      </Typography.Link>
+      {photo.caption && (
+        <Typography.Text type="secondary" ellipsis style={{ display: 'block', fontSize: 11 }}>{photo.caption}</Typography.Text>
+      )}
+    </div>
+  )
+}
+
+function PhotoGallery() {
+  const { data: photos, isLoading } = useQuery({
+    queryKey: ['photos', 'recent'],
+    queryFn: () => getRecentPhotos(12),
+  })
+  if (isLoading) return <Spin />
+  if (!photos || photos.length === 0) return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No specimen photos yet" />
+  return (
+    <Image.PreviewGroup>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+        {photos.map((p) => <GalleryTile key={p.id} photo={p} />)}
+      </div>
+    </Image.PreviewGroup>
+  )
+}
+
 // ── Page ───────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
@@ -289,6 +340,7 @@ export default function DashboardPage() {
     switch (key) {
       case 'list_recent':  content = <RecentAdditions specimens={stats?.recent ?? []} />; break
       case 'list_low_qty': content = <LowQuantityAlerts specimens={stats?.low_qty ?? []} />; break
+      case 'gallery_photos': content = <PhotoGallery />; break
       default: return null
     }
     return <Card title={title}>{content}</Card>

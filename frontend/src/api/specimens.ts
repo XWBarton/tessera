@@ -1,5 +1,5 @@
 import apiClient from './client'
-import type { Specimen, SpecimenList, SpecimenCreate, SpecimenUpdate, SpecimenFilters, SpecimenPhoto, BulkImportRow, BulkImportResult } from '../types'
+import type { Specimen, SpecimenList, SpecimenCreate, SpecimenUpdate, SpecimenFilters, SpecimenPhoto, GalleryPhoto, BulkImportRow, BulkImportResult } from '../types'
 
 export interface SpecimenStats {
   total: number
@@ -69,6 +69,11 @@ const downloadBlob = (data: BlobPart, filename: string) => {
 
 export const getPhotos = async (specimenId: number): Promise<SpecimenPhoto[]> => {
   const { data } = await apiClient.get<SpecimenPhoto[]>(`/specimens/${specimenId}/photos`)
+  return data
+}
+
+export const getRecentPhotos = async (limit = 12): Promise<GalleryPhoto[]> => {
+  const { data } = await apiClient.get<GalleryPhoto[]>('/specimens/photos/recent', { params: { limit } })
   return data
 }
 

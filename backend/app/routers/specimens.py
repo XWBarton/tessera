@@ -43,7 +43,7 @@ class ElementaLinkPayload(BaseModel):
 class ElementaUnlinkPayload(BaseModel):
     specimen_code: str
     elementa_ref: str
-from ..schemas.specimen_photo import SpecimenPhotoRead
+from ..schemas.specimen_photo import SpecimenPhotoRead, GalleryPhoto
 from ..models.tube_usage_log import TubeUsageLog
 from ..models.specimen_photo import SpecimenPhoto
 from ..models.user import User
@@ -535,6 +535,45 @@ def get_specimen_stats(
         "recent": [r.model_dump() for r in recent],
         "low_qty": [s.model_dump() for s in low_qty_loaded],
     }
+
+
+@router.get("/photos/recent", response_model=List[GalleryPhoto])
+def recent_photos(
+    limit: int = 12,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Most recently uploaded photos, excluding those in protected projects the user cannot access."""
+    from ..models.specimen import Specimen as SpecimenModel
+    limit = max(1, min(limit, 50))
+    out: List[GalleryPhoto] = []
+    offset = 0
+    # Over-fetch in batches so restricted photos don't leave the gallery short.
+    while len(out) < limit:
+        rows = (
+            db.query(SpecimenPhoto, SpecimenModel)
+            .join(SpecimenModel, SpecimenModel.id == SpecimenPhoto.specimen_id)
+            .options(joinedload(SpecimenModel.project))
+            .order_by(SpecimenPhoto.uploaded_at.desc(), SpecimenPhoto.id.desc())
+            .offset(offset)
+            .limit(limit * 2)
+            .all()
+        )
+        if not rows:
+            break
+        for photo, specimen in rows:
+            if _has_access(specimen.project, current_user):
+                out.append(GalleryPhoto(
+                    id=photo.id,
+                    specimen_id=specimen.id,
+                    specimen_code=specimen.specimen_code,
+                    caption=photo.caption,
+                    uploaded_at=photo.uploaded_at,
+                ))
+                if len(out) == limit:
+                    break
+        offset += len(rows)
+    return out
 
 
 @router.get("/{specimen_id}", response_model=SpecimenDetail)

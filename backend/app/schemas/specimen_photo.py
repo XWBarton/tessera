@@ -19,3 +19,11 @@ class SpecimenPhotoRead(BaseModel):
     uploaded_at: datetime
     uploaded_by: Optional[UploaderInfo] = None
     model_config = {"from_attributes": True}
+
+
+class GalleryPhoto(BaseModel):
+    id: int
+    specimen_id: int
+    specimen_code: str
+    caption: Optional[str] = None
+    uploaded_at: datetime

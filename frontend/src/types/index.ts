@@ -334,6 +334,14 @@ export interface SpecimenPhoto {
   uploaded_by?: { id: number; full_name: string }
 }
 
+export interface GalleryPhoto {
+  id: number
+  specimen_id: number
+  specimen_code: string
+  caption?: string
+  uploaded_at: string
+}
+
 export interface SpecimenFilters {
   project_id?: number
   collector_id?: number
