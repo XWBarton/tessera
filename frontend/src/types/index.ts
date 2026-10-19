@@ -202,8 +202,8 @@ export interface SpecimenUpdate {
   additional_project_ids?: number[]
   collection_date?: string
   collection_date_end?: string
-  collector_id?: number
-  collector_name?: string
+  collector_id?: number | null
+  collector_name?: string | null
   site_ids?: number[]
   sample_type_id?: number
   quantity_value?: number

@@ -246,8 +246,9 @@ export default function SpecimenFormPage() {
           additional_project_ids: (values.additional_project_ids as number[] | undefined) ?? [],
           collection_date: collectionDate,
           collection_date_end: collectionDateEnd,
-          collector_id: collectorId,
-          collector_name: collectorName,
+          // null (not undefined) so the backend clears the unused collector field
+          collector_id: collectorId ?? null,
+          collector_name: collectorName ?? null,
           site_ids: (values.site_ids as number[] | undefined) ?? [],
           sample_type_id: values.sample_type_id as number | undefined,
           quantity_value,
@@ -304,6 +305,7 @@ export default function SpecimenFormPage() {
             specimen_code: undefined,
             species_associations: [],
             notes: undefined,
+            collection_location_text: undefined,
             storage_position: nextPos,
           })
           setReserveNonce((n) => n + 1)
