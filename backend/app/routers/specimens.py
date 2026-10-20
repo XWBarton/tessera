@@ -352,6 +352,20 @@ def find_by_code(code: str, db: Session = Depends(get_db), _: User = Depends(get
     return {"id": specimen.id}
 
 
+@router.get("/collector-names", response_model=List[str])
+def list_collector_names(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
+    """Distinct free-text collector names already used, for autocomplete."""
+    from ..models.specimen import Specimen as SpecimenModel
+    rows = (
+        db.query(SpecimenModel.collector_name)
+        .filter(SpecimenModel.collector_name.isnot(None), SpecimenModel.collector_name != "")
+        .distinct()
+        .order_by(SpecimenModel.collector_name)
+        .all()
+    )
+    return [r[0] for r in rows]
+
+
 @router.get("/stats")
 def get_specimen_stats(
     db: Session = Depends(get_db),

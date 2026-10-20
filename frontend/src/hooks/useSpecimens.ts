@@ -6,6 +6,7 @@ import {
   updateSpecimen,
   deleteSpecimen,
   getSpecimenStats,
+  getCollectorNames,
 } from '../api/specimens'
 import type { SpecimenFilters, SpecimenCreate, SpecimenUpdate } from '../types'
 
@@ -21,6 +22,9 @@ export const useSpecimen = (id: number) =>
     queryFn: () => getSpecimen(id),
     enabled: !!id,
   })
+
+export const useCollectorNames = () =>
+  useQuery({ queryKey: ['specimens', 'collector-names'], queryFn: getCollectorNames, staleTime: 60_000 })
 
 export const useCreateSpecimen = () => {
   const qc = useQueryClient()

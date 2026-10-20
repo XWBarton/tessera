@@ -22,6 +22,11 @@ export async function getSpecimenStats(): Promise<SpecimenStats> {
   return res.data
 }
 
+export const getCollectorNames = async (): Promise<string[]> => {
+  const { data } = await apiClient.get<string[]>('/specimens/collector-names')
+  return data
+}
+
 export const getSpecimens = async (filters: SpecimenFilters = {}): Promise<SpecimenList> => {
   const { data } = await apiClient.get<SpecimenList>('/specimens/', { params: filters })
   return data

@@ -26,7 +26,7 @@ import { useSpecies } from '../hooks/useSpecies'
 import { useUsers } from '../hooks/useUsers'
 import { useSites, useSitesAtPoint } from '../hooks/useSites'
 import { useSampleTypes } from '../hooks/useSampleTypes'
-import { useSpecimen, useCreateSpecimen, useUpdateSpecimen } from '../hooks/useSpecimens'
+import { useSpecimen, useCreateSpecimen, useUpdateSpecimen, useCollectorNames } from '../hooks/useSpecimens'
 import { useAuth } from '../context/AuthContext'
 import SpeciesAssociationForm from '../components/specimens/SpeciesAssociationForm'
 import type { SpecimenCreate, SpecimenUpdate, SpecimenSpeciesCreate, Site } from '../types'
@@ -48,6 +48,7 @@ export default function SpecimenFormPage() {
 
   const { data: projects } = useProjects()
   const { data: users } = useUsers()
+  const { data: collectorNames } = useCollectorNames()
   const { data: sites } = useSites()
   const { data: sampleTypes } = useSampleTypes()
   const { data: specimen, isLoading: loadingSpecimen } = useSpecimen(specimenId)
@@ -418,7 +419,13 @@ export default function SpecimenFormPage() {
             )}
             {collectorMode === 'name' && (
               <Form.Item name="collector_name" noStyle rules={[{ required: true, message: 'Enter collector name' }]}>
-                <Input placeholder="Collector's name" />
+                <AutoComplete
+                  placeholder="Collector's name"
+                  options={collectorNames?.map((n) => ({ value: n }))}
+                  filterOption={(input, option) =>
+                    (option?.value as string).toLowerCase().includes(input.toLowerCase())
+                  }
+                />
               </Form.Item>
             )}
             {collectorMode === 'unknown' && (
