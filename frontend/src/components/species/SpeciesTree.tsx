@@ -27,7 +27,7 @@ interface TaxonNode {
 
 const NEXT_RANK: Record<string, Rank | undefined> = { order: 'family', family: 'genus', genus: undefined }
 
-function rankValue(s: Species, rank: Rank): string {
+export function rankValue(s: Species, rank: Rank): string {
   const v = rank === 'order' ? s.order_name : rank === 'family' ? s.family : s.genus
   return v?.trim() || UNASSIGNED
 }
