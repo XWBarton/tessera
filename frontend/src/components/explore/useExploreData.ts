@@ -2,7 +2,7 @@ import { useCallback, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useSpecimens } from '../../hooks/useSpecimens'
 import type { Specimen } from '../../types'
-import { DIM, DIMENSIONS, type DimKey } from './dimensions'
+import { DIM, DIMENSIONS, type DimKey, type Measure } from './dimensions'
 
 export const FETCH_LIMIT = 5000
 
@@ -41,6 +41,7 @@ export function useExploreData() {
 
   const all = useMemo(() => data?.items || [], [data])
   const filters = useMemo(() => readFilters(params), [params])
+  const measure: Measure = params.get('count') === 'tubes' ? 'tubes' : 'specimens'
   const filtered = useMemo(() => all.filter((s) => matches(s, filters)), [all, filters])
 
   /** Matches every filter except the date range — lets date-brushing charts keep their full extent. */
@@ -79,15 +80,20 @@ export function useExploreData() {
     if (range) { p.set('from', range[0]); p.set('to', range[1]) }
   }), [update])
 
+  const setMeasure = useCallback((m: Measure) => update((p) => {
+    if (m === 'specimens') p.delete('count')
+    else p.set('count', m)
+  }), [update])
+
   const clear = useCallback(() => update((p) => {
     DIMENSIONS.forEach((d) => p.delete(d.key))
     p.delete('from'); p.delete('to')
   }), [update])
 
   return {
-    all, filtered, undated, filters, isLoading,
+    all, filtered, undated, filters, isLoading, measure,
     total: data?.total ?? 0,
-    filterExcept, setDim, toggle, select, setDateRange, clear,
+    filterExcept, setDim, toggle, select, setDateRange, setMeasure, clear,
   }
 }
 

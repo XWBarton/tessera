@@ -4,7 +4,7 @@ import { FilterOutlined } from '@ant-design/icons'
 import { Treemap, ResponsiveContainer, Tooltip } from 'recharts'
 import type { Specimen } from '../../types'
 import { rankValue } from '../species/SpeciesTree'
-import { speciesName, type DimKey } from './dimensions'
+import { speciesName, unitLabel, type DimKey, type Measure } from './dimensions'
 import { PALETTE } from './colors'
 import type { ExploreData } from './useExploreData'
 
@@ -18,24 +18,31 @@ const RANKS: { dim: DimKey; label: string }[] = [
 
 interface TaxNode { name: string; size: number; children: Map<string, TaxNode> }
 
-function buildTree(specimens: Specimen[]): TaxNode {
+function buildTree(specimens: Specimen[], measure: Measure): TaxNode {
   const root: TaxNode = { name: 'All', size: 0, children: new Map() }
   for (const s of specimens) {
-    // A tube counts once per distinct taxon path it contains.
-    const paths = new Set(s.species_associations.map((a) => [
-      a.species ? rankValue(a.species, 'order') : 'Unassigned',
-      a.species ? rankValue(a.species, 'family') : 'Unassigned',
-      a.species ? rankValue(a.species, 'genus') : 'Unassigned',
-      speciesName(a),
-    ].join('\u0000')))
-    if (!s.species_associations.length) paths.add(['Unassigned', 'Unassigned', 'Unassigned', 'No species'].join('\u0000'))
-    for (const p of paths) {
+    // By tubes, a tube counts once per distinct taxon path; by specimens, each path gets its individuals.
+    const paths = new Map<string, number>()
+    for (const a of s.species_associations) {
+      const p = [
+        a.species ? rankValue(a.species, 'order') : 'Unassigned',
+        a.species ? rankValue(a.species, 'family') : 'Unassigned',
+        a.species ? rankValue(a.species, 'genus') : 'Unassigned',
+        speciesName(a),
+      ].join('\u0000')
+      paths.set(p, measure === 'tubes' ? 1 : (paths.get(p) || 0) + (a.specimen_count ?? 0))
+    }
+    if (!s.species_associations.length && measure === 'tubes') {
+      paths.set(['Unassigned', 'Unassigned', 'Unassigned', 'No species'].join('\u0000'), 1)
+    }
+    for (const [p, w] of paths) {
+      if (!w) continue
       let node = root
-      root.size++
+      root.size += w
       for (const name of p.split('\u0000')) {
         let child = node.children.get(name)
         if (!child) { child = { name, size: 0, children: new Map() }; node.children.set(name, child) }
-        child.size++
+        child.size += w
         node = child
       }
     }
@@ -44,11 +51,12 @@ function buildTree(specimens: Specimen[]): TaxNode {
 }
 
 interface CellProps {
+  measure: Measure
   x: number; y: number; width: number; height: number
   name: string; size: number; index: number; depth: number
 }
 
-function Cell({ x, y, width, height, name, size, index, depth }: CellProps) {
+function Cell({ measure, x, y, width, height, name, size, index, depth }: CellProps) {
   if (depth !== 1) return null
   const fill = PALETTE[index % PALETTE.length]
   const showText = width > 50 && height > 28
@@ -62,7 +70,7 @@ function Cell({ x, y, width, height, name, size, index, depth }: CellProps) {
           </text>
           {height > 44 && (
             <text x={x + 8} y={y + 35} fill="#fff" fillOpacity={0.85} fontSize={11} style={{ pointerEvents: 'none' }}>
-              {size} tube{size === 1 ? '' : 's'}
+              {size} {unitLabel(measure, size)}
             </text>
           )}
         </>
@@ -73,7 +81,7 @@ function Cell({ x, y, width, height, name, size, index, depth }: CellProps) {
 
 export default function TaxonomyTreemap({ data }: { data: ExploreData }) {
   const [path, setPath] = useState<string[]>([])
-  const tree = useMemo(() => buildTree(data.filtered), [data.filtered])
+  const tree = useMemo(() => buildTree(data.filtered, data.measure), [data.filtered, data.measure])
 
   // Walk down the drill path, stopping early if filters removed a level.
   let node = tree
@@ -126,7 +134,7 @@ export default function TaxonomyTreemap({ data }: { data: ExploreData }) {
         </Space>
       </div>
       {items.length === 0 ? (
-        <Empty description="No tubes match the current filters" />
+        <Empty description={`No ${data.measure} match the current filters`} />
       ) : (
         <ResponsiveContainer width="100%" height={480}>
           <Treemap
@@ -134,10 +142,10 @@ export default function TaxonomyTreemap({ data }: { data: ExploreData }) {
             dataKey="size"
             nameKey="name"
             isAnimationActive={false}
-            content={<Cell {...({} as CellProps)} />}
+            content={<Cell {...({} as CellProps)} measure={data.measure} />}
             onClick={onCellClick}
           >
-            <Tooltip formatter={(v) => [`${v} tubes`, rank?.label]} />
+            <Tooltip formatter={(v) => [`${v} ${data.measure}`, rank?.label]} />
           </Treemap>
         </ResponsiveContainer>
       )}

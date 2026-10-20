@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { Empty, Typography } from 'antd'
 import dayjs from 'dayjs'
 import type { Specimen } from '../../types'
+import { unitLabel, weightOf, type Measure } from './dimensions'
 import { heat } from './colors'
 
 const CELL = 13
@@ -13,24 +14,25 @@ const MAX_YEARS = 10
 
 interface Props {
   specimens: Specimen[]
+  measure: Measure
   /** Currently selected range; days outside it are faded. */
   selected?: [string, string]
   onSelectRange: (range: [string, string]) => void
 }
 
 // GitHub-style activity calendar: one block per year, a column per week, a row per weekday.
-export default function CalendarHeatmap({ specimens, selected, onSelectRange }: Props) {
+export default function CalendarHeatmap({ specimens, measure, selected, onSelectRange }: Props) {
   const { counts, years, max } = useMemo(() => {
     const counts = new Map<string, number>()
     specimens.forEach((s) => {
       const d = s.collection_date?.slice(0, 10)
-      if (d) counts.set(d, (counts.get(d) || 0) + 1)
+      if (d) counts.set(d, (counts.get(d) || 0) + weightOf(s, measure))
     })
     const years = Array.from(new Set(Array.from(counts.keys()).map((d) => Number(d.slice(0, 4)))))
       .sort((a, b) => b - a)
       .slice(0, MAX_YEARS)
     return { counts, years, max: Math.max(1, ...counts.values()) }
-  }, [specimens])
+  }, [specimens, measure])
 
   if (!years.length) return <Empty description="No tubes with collection dates" />
 
@@ -49,7 +51,7 @@ export default function CalendarHeatmap({ specimens, selected, onSelectRange }: 
             <Typography.Link strong onClick={() => onSelectRange([`${year}-01-01`, `${year}-12-31`])}>
               {year}
             </Typography.Link>
-            <Typography.Text type="secondary" style={{ marginLeft: 8, fontSize: 12 }}>{yearTotal} tubes</Typography.Text>
+            <Typography.Text type="secondary" style={{ marginLeft: 8, fontSize: 12 }}>{yearTotal} {unitLabel(measure, yearTotal)}</Typography.Text>
             <svg width={width} height={height} style={{ display: 'block' }}>
               {MONTHS.map((m, i) => {
                 const first = dayjs(`${year}-${String(i + 1).padStart(2, '0')}-01`)
@@ -89,7 +91,7 @@ export default function CalendarHeatmap({ specimens, selected, onSelectRange }: 
                     style={{ cursor: n ? 'pointer' : 'default' }}
                     onClick={() => n && onSelectRange([key, key])}
                   >
-                    <title>{`${date.format('ddd D MMM YYYY')}: ${n} tube${n === 1 ? '' : 's'}`}</title>
+                    <title>{`${date.format('ddd D MMM YYYY')}: ${n} ${unitLabel(measure, n)}`}</title>
                   </rect>
                 )
               })}

@@ -2,10 +2,10 @@ import { useMemo, useState } from 'react'
 import { Card, Empty, Select, Space, Typography } from 'antd'
 import { useNavigate } from 'react-router-dom'
 import {
-  BarChart, Bar, Brush, ScatterChart, Scatter, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
+  BarChart, Bar, Brush, ScatterChart, Scatter, XAxis, YAxis, ZAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from 'recharts'
 import dayjs from 'dayjs'
-import { DIM, DIM_OPTIONS, countBy, type DimKey } from './dimensions'
+import { DIM, DIM_OPTIONS, countBy, unitLabel, weightOf, type DimKey } from './dimensions'
 import { makeColorScale } from './colors'
 import CalendarHeatmap from './CalendarHeatmap'
 import type { ExploreData } from './useExploreData'
@@ -17,7 +17,7 @@ export default function TimelineView({ data }: { data: ExploreData }) {
     <Space direction="vertical" size={16} style={{ width: '100%' }}>
       <Card title="Collection activity" size="small"
         extra={<Typography.Text type="secondary" style={{ fontSize: 12 }}>Click a day, month or year to filter</Typography.Text>}>
-        <CalendarHeatmap specimens={data.undated} selected={data.filters.dateRange} onSelectRange={data.setDateRange} />
+        <CalendarHeatmap specimens={data.undated} measure={data.measure} selected={data.filters.dateRange} onSelectRange={data.setDateRange} />
       </Card>
       <MonthlyHistogram data={data} />
       <Lanes data={data} />
@@ -32,7 +32,7 @@ function MonthlyHistogram({ data }: { data: ExploreData }) {
     const counts = new Map<string, number>()
     data.undated.forEach((s) => {
       const m = s.collection_date?.slice(0, 7)
-      if (m) counts.set(m, (counts.get(m) || 0) + 1)
+      if (m) counts.set(m, (counts.get(m) || 0) + weightOf(s, data.measure))
     })
     const keys = Array.from(counts.keys()).sort()
     if (!keys.length) return []
@@ -45,7 +45,7 @@ function MonthlyHistogram({ data }: { data: ExploreData }) {
       m = m.add(1, 'month')
     }
     return out
-  }, [data.undated])
+  }, [data.undated, data.measure])
 
   const range = data.filters.dateRange
   const startIndex = range ? Math.max(0, months.findIndex((m) => m.month >= range[0].slice(0, 7))) : 0
@@ -64,14 +64,14 @@ function MonthlyHistogram({ data }: { data: ExploreData }) {
   if (months.length < 2) return null
 
   return (
-    <Card title="Tubes per month" size="small"
+    <Card title={`${data.measure === 'tubes' ? 'Tubes' : 'Specimens'} per month`} size="small"
       extra={<Typography.Text type="secondary" style={{ fontSize: 12 }}>Drag the handles below to set the date range</Typography.Text>}>
       <ResponsiveContainer width="100%" height={260}>
         <BarChart data={months} margin={{ left: 0, right: 16, top: 8 }}>
           <CartesianGrid strokeDasharray="3 3" vertical={false} />
           <XAxis dataKey="month" tickFormatter={(v) => dayjs(v + '-01').format('MMM YY')} tick={{ fontSize: 11 }} minTickGap={20} />
           <YAxis allowDecimals={false} width={36} tick={{ fontSize: 11 }} />
-          <Tooltip labelFormatter={(v) => dayjs(v + '-01').format('MMMM YYYY')} formatter={(v) => [v, 'Tubes']} />
+          <Tooltip labelFormatter={(v) => dayjs(v + '-01').format('MMMM YYYY')} formatter={(v) => [v, data.measure === 'tubes' ? 'Tubes' : 'Specimens']} />
           <Bar dataKey="count" fill="#2e7d32" radius={[2, 2, 0, 0]} />
           <Brush
             key={`${range?.join() ?? 'all'}-${months.length}`}
@@ -101,8 +101,8 @@ function Lanes({ data }: { data: ExploreData }) {
 
   const { lanes, series } = useMemo(() => {
     const dated = data.filtered.filter((s) => s.collection_date)
-    const lanes = countBy(dated, laneBy).slice(0, MAX_LANES).map((c) => c.name)
-    const scale = makeColorScale(dated, laneBy, DIM[laneBy].values)
+    const lanes = countBy(dated, laneBy, data.measure).slice(0, MAX_LANES).map((c) => c.name)
+    const scale = makeColorScale(dated, laneBy, DIM[laneBy].values, data.measure)
     const series = lanes.map((lane, y) => ({
       lane,
       color: scale.value(lane),
@@ -115,10 +115,11 @@ function Lanes({ data }: { data: ExploreData }) {
           code: s.specimen_code,
           lane,
           collector: s.collector?.full_name || s.collector_name || '',
+          n: weightOf(s, 'specimens'),
         })),
     }))
     return { lanes, series }
-  }, [data.filtered, laneBy])
+  }, [data.filtered, laneBy, data.measure])
 
   return (
     <Card
@@ -152,6 +153,8 @@ function Lanes({ data }: { data: ExploreData }) {
                 )
               }}
             />
+            {/* By specimens, point size shows how many individuals a tube holds. */}
+            <ZAxis dataKey="n" range={data.measure === 'specimens' ? [30, 320] : [60, 60]} />
             <Tooltip
               cursor={{ strokeDasharray: '3 3' }}
               content={({ payload }) => {
@@ -162,6 +165,7 @@ function Lanes({ data }: { data: ExploreData }) {
                     <div><strong>{d.code}</strong></div>
                     <div>{DIM[laneBy].label}: {d.lane}</div>
                     <div>Date: {dayjs(d.x).format('D MMM YYYY')}</div>
+                    <div>{d.n} {unitLabel('specimens', d.n)}</div>
                     {d.collector && <div>Collector: {d.collector}</div>}
                   </div>
                 )

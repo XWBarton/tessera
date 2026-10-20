@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Button, Card, Empty, Select, Space, Table, Typography } from 'antd'
 import { SwapOutlined } from '@ant-design/icons'
-import { DIM, DIM_OPTIONS, countBy, type DimKey } from './dimensions'
+import { DIM, DIM_OPTIONS, countBy, unitsOf, unitValues, weightOf, type DimKey } from './dimensions'
 import { heat } from './colors'
 import type { ExploreData } from './useExploreData'
 
@@ -15,19 +15,20 @@ export default function PivotGrid({ data }: { data: ExploreData }) {
   const [colDim, setColDim] = useState<DimKey>('year')
 
   const { rows, cols, max, colTotals, grand } = useMemo(() => {
-    const cols = countBy(data.filtered, colDim).slice(0, MAX_COLS).map((c) => c.name)
-    const rowNames = countBy(data.filtered, rowDim).slice(0, MAX_ROWS).map((c) => c.name)
+    const m = data.measure
+    const cols = countBy(data.filtered, colDim, m).filter((c) => c.value > 0).slice(0, MAX_COLS).map((c) => c.name)
+    const rowNames = countBy(data.filtered, rowDim, m).filter((c) => c.value > 0).slice(0, MAX_ROWS).map((c) => c.name)
     const cell = new Map<string, number>()
     const rowTotal = new Map<string, number>()
     const colTotals: Record<string, number> = {}
-    for (const s of data.filtered) {
-      const rv = DIM[rowDim].values(s)
-      const cv = DIM[colDim].values(s)
-      rv.forEach((r) => rowTotal.set(r, (rowTotal.get(r) || 0) + 1))
-      cv.forEach((c) => { colTotals[c] = (colTotals[c] || 0) + 1 })
+    for (const s of data.filtered) for (const u of unitsOf(s, m)) {
+      const rv = unitValues(s, u, rowDim)
+      const cv = unitValues(s, u, colDim)
+      rv.forEach((r) => rowTotal.set(r, (rowTotal.get(r) || 0) + u.weight))
+      cv.forEach((c) => { colTotals[c] = (colTotals[c] || 0) + u.weight })
       for (const r of rv) for (const c of cv) {
         const k = `${r}\u0000${c}`
-        cell.set(k, (cell.get(k) || 0) + 1)
+        cell.set(k, (cell.get(k) || 0) + u.weight)
       }
     }
     let max = 1
@@ -40,8 +41,9 @@ export default function PivotGrid({ data }: { data: ExploreData }) {
       })
       return row
     })
-    return { rows, cols, max, colTotals, grand: data.filtered.length }
-  }, [data.filtered, rowDim, colDim])
+    const grand = data.filtered.reduce((n, s) => n + weightOf(s, m), 0)
+    return { rows, cols, max, colTotals, grand }
+  }, [data.filtered, data.measure, rowDim, colDim])
 
   const columns = [
     {
@@ -84,10 +86,10 @@ export default function PivotGrid({ data }: { data: ExploreData }) {
         <Button size="small" type="text" icon={<SwapOutlined />} onClick={() => { setRowDim(colDim); setColDim(rowDim) }} />
         <Typography.Text type="secondary">Columns</Typography.Text>
         <Select size="small" value={colDim} onChange={setColDim} options={DIM_OPTIONS} style={{ width: 140 }} />
-        <Typography.Text type="secondary" style={{ fontSize: 12 }}>Click a cell to filter to it · a tube counts in each group it belongs to</Typography.Text>
+        <Typography.Text type="secondary" style={{ fontSize: 12 }}>Click a cell to filter to it · a tube or specimen counts in each group it belongs to</Typography.Text>
       </Space>
       {rows.length === 0 ? (
-        <Empty description="No tubes match the current filters" />
+        <Empty description={`No ${data.measure} match the current filters`} />
       ) : (
         <Table<Row>
           size="small"

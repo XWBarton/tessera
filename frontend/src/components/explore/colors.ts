@@ -1,5 +1,5 @@
 import type { Specimen } from '../../types'
-import { countBy, type DimKey } from './dimensions'
+import { countBy, type DimKey, type Measure } from './dimensions'
 
 export const CONFIDENCE_COLORS: Record<string, string> = {
   Confirmed: '#2e7d32',
@@ -27,8 +27,10 @@ export interface ColorScale {
 }
 
 // The most common values get a palette colour; the long tail collapses into "Other".
-export function makeColorScale(specimens: Specimen[], dim: DimKey, dimValues: (s: Specimen) => string[]): ColorScale {
-  const counts = countBy(specimens, dim)
+export function makeColorScale(
+  specimens: Specimen[], dim: DimKey, dimValues: (s: Specimen) => string[], measure: Measure = 'tubes',
+): ColorScale {
+  const counts = countBy(specimens, dim, measure)
   const map = new Map<string, string>()
   if (dim === 'confidence') {
     counts.forEach((c) => map.set(c.name, CONFIDENCE_COLORS[c.name] || OTHER_COLOR))

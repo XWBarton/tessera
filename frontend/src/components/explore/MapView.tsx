@@ -11,7 +11,7 @@ import 'leaflet.heat'
 import 'leaflet/dist/leaflet.css'
 import dayjs from 'dayjs'
 import type { Specimen } from '../../types'
-import { DIM, DIM_OPTIONS, speciesLabel, type DimKey } from './dimensions'
+import { DIM, DIM_OPTIONS, speciesLabel, weightOf, type DimKey } from './dimensions'
 import { makeColorScale, OTHER } from './colors'
 import type { ExploreData } from './useExploreData'
 
@@ -44,11 +44,12 @@ function FitBounds({ points, trigger }: { points: [number, number][]; trigger: n
   return null
 }
 
-function HeatLayer({ points }: { points: [number, number][] }) {
+function HeatLayer({ points }: { points: [number, number, number][] }) {
   const map = useMap()
   useEffect(() => {
-    const layer = L.heatLayer(points.map(([a, b]) => [a, b, 1] as L.HeatLatLngTuple), {
+    const layer = L.heatLayer(points as L.HeatLatLngTuple[], {
       radius: 25, blur: 18, minOpacity: 0.35, maxZoom: 12,
+      max: Math.max(1, ...points.map((p) => p[2])),
     }).addTo(map)
     return () => { map.removeLayer(layer) }
   }, [map, points])
@@ -137,8 +138,12 @@ export default function MapView({ data }: { data: ExploreData }) {
     })
   }, [geo, frame, months, playback])
 
-  const scale = useMemo(() => makeColorScale(geo, colorBy, DIM[colorBy].values), [geo, colorBy])
-  const points = useMemo(() => visible.map((s) => [s.collection_lat!, s.collection_lon!] as [number, number]), [visible])
+  const scale = useMemo(() => makeColorScale(geo, colorBy, DIM[colorBy].values, data.measure), [geo, colorBy, data.measure])
+  // Heat intensity follows the chosen measure; tubes with no specimen count still register faintly.
+  const heatPoints = useMemo(
+    () => visible.map((s) => [s.collection_lat!, s.collection_lon!, Math.max(0.2, weightOf(s, data.measure))] as [number, number, number]),
+    [visible, data.measure]
+  )
   const allPoints = useMemo(() => geo.map((s) => [s.collection_lat!, s.collection_lon!] as [number, number]), [geo])
 
   // Re-fit whenever the filtered set changes (not while scrubbing through time).
@@ -192,7 +197,7 @@ export default function MapView({ data }: { data: ExploreData }) {
             </LayersControl.BaseLayer>
           </LayersControl>
 
-          {mode === 'heatmap' && <HeatLayer points={points} />}
+          {mode === 'heatmap' && <HeatLayer points={heatPoints} />}
 
           {mode === 'clusters' && (
             <MarkerClusterGroup key={`${colorBy}-${frame}-${playback}`} chunkedLoading showCoverageOnHover={false}>

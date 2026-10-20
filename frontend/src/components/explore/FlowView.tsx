@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { Button, Card, Empty, InputNumber, Select, Space, Typography } from 'antd'
 import { ArrowRightOutlined, PlusOutlined, CloseOutlined } from '@ant-design/icons'
 import { Sankey, Tooltip, ResponsiveContainer } from 'recharts'
-import { DIM, DIM_OPTIONS, countBy, type DimKey } from './dimensions'
+import { DIM, DIM_OPTIONS, countBy, unitsOf, unitValues, type DimKey } from './dimensions'
 import { OTHER, OTHER_COLOR, PALETTE } from './colors'
 import type { ExploreData } from './useExploreData'
 
@@ -48,7 +48,7 @@ export default function FlowView({ data }: { data: ExploreData }) {
     const nodes: FlowNode[] = []
     const index = new Map<string, number>()
     // Per stage, keep the top-N values; the rest fold into "Other".
-    const keep = stages.map((dim) => new Set(countBy(data.filtered, dim).slice(0, topN).map((c) => c.name)))
+    const keep = stages.map((dim) => new Set(countBy(data.filtered, dim, data.measure).slice(0, topN).map((c) => c.name)))
     const nodeId = (stage: number, value: string) => {
       const v = keep[stage].has(value) ? value : OTHER
       const key = `${stage}\u0000${v}`
@@ -63,11 +63,12 @@ export default function FlowView({ data }: { data: ExploreData }) {
     }
 
     const links = new Map<string, { source: number; target: number; value: number }>()
-    for (const s of data.filtered) {
-      const vals = stages.map((dim) => DIM[dim].values(s))
+    for (const s of data.filtered) for (const u of unitsOf(s, data.measure)) {
+      if (!u.weight) continue
+      const vals = stages.map((dim) => unitValues(s, u, dim))
       for (let i = 0; i < stages.length - 1; i++) {
-        // Split a tube's weight across its value combinations so totals stay honest.
-        const w = 1 / (vals[i].length * vals[i + 1].length)
+        // Split a unit's weight across its value combinations so totals stay honest.
+        const w = u.weight / (vals[i].length * vals[i + 1].length)
         for (const a of vals[i]) for (const b of vals[i + 1]) {
           const source = nodeId(i, a)
           const target = nodeId(i + 1, b)
@@ -82,7 +83,7 @@ export default function FlowView({ data }: { data: ExploreData }) {
       nodes,
       links: Array.from(links.values()).map((l) => ({ ...l, value: Math.round(l.value * 100) / 100 })),
     }
-  }, [data.filtered, stages, topN])
+  }, [data.filtered, data.measure, stages, topN])
 
   const setStage = (i: number, dim: DimKey) => setStages((s) => s.map((d, j) => (j === i ? dim : d)))
 
@@ -111,7 +112,7 @@ export default function FlowView({ data }: { data: ExploreData }) {
       </Space>
 
       {graph.links.length === 0 ? (
-        <Empty description="No tubes match the current filters" />
+        <Empty description={`No ${data.measure} match the current filters`} />
       ) : (
         <ResponsiveContainer width="100%" height={Math.max(360, Math.min(800, graph.nodes.length * 22))}>
           <Sankey
@@ -129,7 +130,7 @@ export default function FlowView({ data }: { data: ExploreData }) {
               />
             }
           >
-            <Tooltip formatter={(v) => [`${v} tubes`]} />
+            <Tooltip formatter={(v) => [`${v} ${data.measure}`]} />
           </Sankey>
         </ResponsiveContainer>
       )}

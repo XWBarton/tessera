@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { Button, DatePicker, Select, Space, Tag, Typography } from 'antd'
 import { ClearOutlined, FilterOutlined } from '@ant-design/icons'
 import dayjs from 'dayjs'
-import { DIM, DIM_OPTIONS, countBy, type DimKey } from './dimensions'
+import { DIM, DIM_OPTIONS, countBy, type DimKey, type Measure } from './dimensions'
 import type { ExploreData } from './useExploreData'
 
 const DEFAULT_DIMS: DimKey[] = ['project', 'species', 'collector']
@@ -19,7 +19,7 @@ export default function ExploreFilterBar({ data }: { data: ExploreData }) {
     <div style={{ marginBottom: 16 }}>
       <Space wrap align="center">
         {shown.map((dim) => (
-          <DimSelect key={dim} dim={dim} value={filters.dims[dim] || []} onChange={(v) => setDim(dim, v)} facet={() => filterExcept(dim)} />
+          <DimSelect key={dim} dim={dim} value={filters.dims[dim] || []} onChange={(v) => setDim(dim, v)} facet={() => filterExcept(dim)} measure={data.measure} />
         ))}
         <DatePicker.RangePicker
           allowEmpty={[false, false]}
@@ -55,8 +55,9 @@ export default function ExploreFilterBar({ data }: { data: ExploreData }) {
   )
 }
 
-function DimSelect({ dim, value, onChange, facet }: {
+function DimSelect({ dim, value, onChange, facet, measure }: {
   dim: DimKey
+  measure: Measure
   value: string[]
   onChange: (v: string[]) => void
   facet: () => ReturnType<ExploreData['filterExcept']>
@@ -65,8 +66,8 @@ function DimSelect({ dim, value, onChange, facet }: {
   // Facet counts only computed while the dropdown is open.
   const options = useMemo(() => {
     if (!open) return value.map((v) => ({ value: v, label: v }))
-    return countBy(facet(), dim).map((c) => ({ value: c.name, label: `${c.name} (${c.value})`, title: c.name }))
-  }, [open, facet, dim, value])
+    return countBy(facet(), dim, measure).map((c) => ({ value: c.name, label: `${c.name} (${c.value})`, title: c.name }))
+  }, [open, facet, dim, value, measure])
 
   return (
     <Select

@@ -1,9 +1,10 @@
-import { Alert, Spin, Tabs, Typography } from 'antd'
+import { Alert, Segmented, Space, Spin, Tabs, Typography } from 'antd'
 import {
   EnvironmentOutlined, CalendarOutlined, ApartmentOutlined, BranchesOutlined, TableOutlined,
 } from '@ant-design/icons'
 import { useSearchParams } from 'react-router-dom'
 import { useExploreData, FETCH_LIMIT } from '../components/explore/useExploreData'
+import type { Measure } from '../components/explore/dimensions'
 import SummaryStrip from '../components/explore/SummaryStrip'
 import ExploreFilterBar from '../components/explore/ExploreFilterBar'
 import MapView from '../components/explore/MapView'
@@ -25,7 +26,17 @@ export default function ExplorePage() {
 
   return (
     <div>
-      <Typography.Title level={3} style={{ marginBottom: 12 }}>Explore</Typography.Title>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+        <Typography.Title level={3} style={{ margin: 0 }}>Explore</Typography.Title>
+        <Space>
+          <Typography.Text type="secondary">Count</Typography.Text>
+          <Segmented
+            value={data.measure}
+            onChange={(v) => data.setMeasure(v as Measure)}
+            options={[{ value: 'specimens', label: 'Specimens' }, { value: 'tubes', label: 'Tubes' }]}
+          />
+        </Space>
+      </div>
 
       {data.total > FETCH_LIMIT && (
         <Alert
@@ -37,7 +48,7 @@ export default function ExplorePage() {
       <ExploreFilterBar data={data} />
 
       <Spin spinning={data.isLoading}>
-        <SummaryStrip specimens={data.filtered} totalAll={data.all.length} />
+        <SummaryStrip specimens={data.filtered} all={data.all} />
         <Tabs
           activeKey={tab}
           onChange={setTab}
