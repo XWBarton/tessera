@@ -6,7 +6,7 @@ from ..crud.site import get_site, search_sites, get_all_sites, create_site, upda
 from .. import geo
 from fastapi.responses import Response
 import json
-from ..schemas.site import SiteRead, SiteCreate, SiteUpdate, DuplicateCheckRequest, DuplicateMatch, SiteMergeRequest
+from ..schemas.site import SiteRead, SiteCreate, SiteUpdate, DuplicateCheckRequest, DuplicateMatch, SiteMergeRequest, SiteMultiMergeRequest
 from ..schemas.specimen import SpecimenDetail
 from ..models.user import User
 from ..models.site import Site
@@ -227,6 +227,37 @@ def update_existing_site(
         raise HTTPException(status_code=400, detail="A site with this name already exists at this level")
 
 
+@router.post("/merge", response_model=SiteRead)
+def merge_many_sites(
+    body: SiteMultiMergeRequest,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_admin),
+):
+    """Merge several sites that are the same place into target_id, all or nothing."""
+    target = get_site(db, body.target_id)
+    source_ids = list(dict.fromkeys(i for i in body.source_ids if i != body.target_id))
+    if not target:
+        raise HTTPException(status_code=404, detail="Site not found")
+    if not source_ids:
+        raise HTTPException(status_code=400, detail="Pick at least one site to merge into the one you keep")
+    sources = [get_site(db, i) for i in source_ids]
+    if any(s is None for s in sources):
+        raise HTTPException(status_code=404, detail="Site not found")
+    for source in sources:
+        if target.id in descendant_ids(db, source.id):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot keep '{target.path}': it sits under '{source.path}', which is being merged away. Keep '{source.path}' instead",
+            )
+    target_id = target.id
+    try:
+        merge_sites(db, sources, target)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Merge would create two sub-sites with the same name under the kept site; rename one first")
+    return get_site(db, target_id)
+
+
 @router.post("/{site_id}/merge", response_model=SiteRead)
 def merge_site(
     site_id: int,
@@ -245,7 +276,7 @@ def merge_site(
         raise HTTPException(status_code=400, detail="Cannot merge a site into one of its own sub-sites")
     target_id = target.id
     try:
-        merge_sites(db, source, target)
+        merge_sites(db, [source], target)
     except IntegrityError:
         db.rollback()
         raise HTTPException(status_code=400, detail="Merge would create two sub-sites with the same name under the target; rename one first")

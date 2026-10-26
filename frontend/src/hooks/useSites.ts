@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { getSites, createSite, updateSite, deleteSite, getSiteSpecimens, getSiteCounts, checkSiteDuplicates, mergeSite, backfillHierarchy, getSitesAtPoint } from '../api/sites'
+import { getSites, createSite, updateSite, deleteSite, getSiteSpecimens, getSiteCounts, checkSiteDuplicates, mergeSites, backfillHierarchy, getSitesAtPoint } from '../api/sites'
 import type { DuplicateCheckParams } from '../api/sites'
 import type { SiteCreate, SiteUpdate } from '../types'
 
@@ -51,10 +51,10 @@ export const useSiteDuplicates = (params: DuplicateCheckParams, enabled: boolean
     staleTime: 10_000,
   })
 
-export const useMergeSite = () => {
+export const useMergeSites = () => {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, targetId }: { id: number; targetId: number }) => mergeSite(id, targetId),
+    mutationFn: ({ sourceIds, targetId }: { sourceIds: number[]; targetId: number }) => mergeSites(sourceIds, targetId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['sites'] })
       qc.invalidateQueries({ queryKey: ['site-counts'] })

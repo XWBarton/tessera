@@ -251,8 +251,29 @@ def specimen_counts(db: Session) -> dict:
     return {sid: n for sid, n in rows}
 
 
-def merge_sites(db: Session, source: Site, target: Site) -> None:
-    """Move everything from source onto target, then delete source."""
+def merge_sites(db: Session, sources: List[Site], target: Site) -> None:
+    """Merge every source into target in one transaction, then delete the sources.
+
+    Deepest sources go first, so a source nested under another source hands its sub-sites
+    to the target directly rather than being moved there itself and clashing by name."""
+    parent_of = dict(db.query(Site.id, Site.parent_id).all())
+
+    def depth(site_id: int) -> int:
+        d, seen = 0, set()
+        while parent_of.get(site_id) is not None and site_id not in seen:
+            seen.add(site_id)
+            site_id = parent_of[site_id]
+            d += 1
+        return d
+
+    for source in sorted(sources, key=lambda s: -depth(s.id)):
+        _merge_one(db, source, target)
+    sync_geo_fields(db, target)
+    db.commit()
+
+
+def _merge_one(db: Session, source: Site, target: Site) -> None:
+    """Move everything from source onto target, then delete source (no commit)."""
     # Specimen links (many-to-many): add target where missing, then drop source rows.
     spec_ids = [r[0] for r in db.query(specimen_sites_table.c.specimen_id).filter(specimen_sites_table.c.site_id == source.id)]
     already = {r[0] for r in db.query(specimen_sites_table.c.specimen_id).filter(specimen_sites_table.c.site_id == target.id)}
@@ -276,8 +297,6 @@ def merge_sites(db: Session, source: Site, target: Site) -> None:
     db.delete(source)
     db.flush()
     db.refresh(target)
-    sync_geo_fields(db, target)
-    db.commit()
 
 
 COUNTRY_LEVELS = {"country"}

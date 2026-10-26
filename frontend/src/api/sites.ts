@@ -113,7 +113,8 @@ export const downloadSiteExport = async (
   }
 }
 
-export const mergeSite = async (id: number, targetId: number): Promise<Site> => {
-  const { data } = await apiClient.post<Site>(`/sites/${id}/merge`, { target_id: targetId })
+/** Merge several sites that are the same place into the one being kept. */
+export const mergeSites = async (sourceIds: number[], targetId: number): Promise<Site> => {
+  const { data } = await apiClient.post<Site>('/sites/merge', { source_ids: sourceIds, target_id: targetId })
   return data
 }

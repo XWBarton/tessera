@@ -29,6 +29,7 @@ import { useAuth } from '../context/AuthContext'
 import { useLookupOptions, useAddLookupOption, useDeleteLookupOption } from '../hooks/useLookups'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import apiClient from '../api/client'
+import MergeSitesPanel from '../components/sites/MergeSitesPanel'
 
 function UsersTab() {
   const { user: currentUser } = useAuth()
@@ -961,6 +962,7 @@ export default function AdminPage() {
           { key: 'options', label: 'Dropdown Options', children: <OptionsTab /> },
           { key: 'integrations', label: 'Integrations', children: <IntegrationsTab /> },
           { key: 'projects', label: 'Projects', children: <ProjectsTab /> },
+          { key: 'merge-sites', label: 'Merge Sites', children: <MergeSitesPanel /> },
           { key: 'sql', label: 'SQL Console', children: <SqlConsoleTab /> },
           { key: 'about', label: 'About', children: <AboutTab /> },
         ]}

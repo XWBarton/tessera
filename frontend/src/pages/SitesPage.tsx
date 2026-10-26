@@ -1,10 +1,10 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Typography, Table, Button, Modal, Form, Input, InputNumber, Space, message, Popconfirm, Tag, Select, Drawer, Spin, Tabs, TreeSelect, Alert, Tree, Dropdown, Collapse, Radio, Descriptions, Segmented } from 'antd'
-import { PlusOutlined, DeleteOutlined, EditOutlined, CopyOutlined, MergeCellsOutlined, ClusterOutlined, FolderOutlined, FolderOpenOutlined, EnvironmentOutlined, DownloadOutlined, SearchOutlined } from '@ant-design/icons'
+import { PlusOutlined, DeleteOutlined, EditOutlined, CopyOutlined, ClusterOutlined, FolderOutlined, FolderOpenOutlined, EnvironmentOutlined, DownloadOutlined, SearchOutlined } from '@ant-design/icons'
 import { MapContainer, TileLayer, LayersControl, CircleMarker, Circle, GeoJSON, useMap } from 'react-leaflet'
 import L from 'leaflet'
-import { useSites, useCreateSite, useUpdateSite, useDeleteSite, useSiteSpecimens, useSiteCounts, useSiteDuplicates, useMergeSite, useMoveSite, useBackfillHierarchy } from '../hooks/useSites'
+import { useSites, useCreateSite, useUpdateSite, useDeleteSite, useSiteSpecimens, useSiteCounts, useSiteDuplicates, useMoveSite, useBackfillHierarchy } from '../hooks/useSites'
 import { buildSiteTree, subtreeIds, effectiveLocation, geoFromParent } from '../utils/siteTree'
 import type { SiteNode } from '../utils/siteTree'
 import type { TreeProps } from 'antd'
@@ -504,14 +504,13 @@ function SiteMap({ site, loc }: { site: Site; loc: NonNullable<ReturnType<typeof
   )
 }
 
-function SiteDrawer({ site, sites, isAdmin, onClose, onEdit, onAddChild, onMerge, onDelete }: {
+function SiteDrawer({ site, sites, isAdmin, onClose, onEdit, onAddChild, onDelete }: {
   site: Site
   sites: Site[]
   isAdmin: boolean
   onClose: () => void
   onEdit: (site: Site) => void
   onAddChild: (site: Site) => void
-  onMerge: (site: Site) => void
   onDelete: (site: Site) => void
 }) {
   const navigate = useNavigate()
@@ -633,12 +632,9 @@ function SiteDrawer({ site, sites, isAdmin, onClose, onEdit, onAddChild, onMerge
               items: [
                 { key: 'geojson', label: 'Export GeoJSON (.geojson)' },
                 { key: 'shapefile', label: 'Export Shapefile (.zip)' },
-                ...(isAdmin ? [{ key: 'merge', label: 'Merge into another site…', icon: <MergeCellsOutlined /> }] : []),
               ],
               onClick: ({ key }) =>
-                key === 'merge'
-                  ? onMerge(site)
-                  : runSiteExport(key as 'geojson' | 'shapefile', { siteId: site.id, name: site.name.replace(/[^\w-]+/g, '_') }),
+                runSiteExport(key as 'geojson' | 'shapefile', { siteId: site.id, name: site.name.replace(/[^\w-]+/g, '_') }),
             }}
           >
             <Button size="small">More</Button>
@@ -667,7 +663,6 @@ export default function SitesPage() {
   const { data: projects } = useProjects()
   const { data: counts } = useSiteCounts()
   const { data: allSites } = useSites()
-  const mergeSite = useMergeSite()
   const backfill = useBackfillHierarchy()
   // One-off cleanup: only offer it while some top-level site still has country/state text but no place above it
   const needsTidy = (allSites ?? []).some((s) =>
@@ -694,8 +689,6 @@ export default function SitesPage() {
       message.error(err.response?.data?.detail || 'Failed to apply')
     }
   }
-  const [mergingSite, setMergingSite] = useState<Site | null>(null)
-  const [mergeTarget, setMergeTarget] = useState<number | undefined>(undefined)
   const [newParentId, setNewParentId] = useState<number | undefined>(undefined)
   const tree = useMemo(() => buildSiteTree(sites ?? [], counts), [sites, counts])
   const createSite = useCreateSite()
@@ -726,19 +719,6 @@ export default function SitesPage() {
     } catch (e: unknown) {
       const err = e as { response?: { data?: { detail?: string } } }
       message.error(err.response?.data?.detail || 'Failed to update site')
-    }
-  }
-
-  const handleMerge = async () => {
-    if (!mergingSite || !mergeTarget) return
-    try {
-      await mergeSite.mutateAsync({ id: mergingSite.id, targetId: mergeTarget })
-      message.success(`Merged "${mergingSite.name}" into the selected site`)
-      setMergingSite(null)
-      setMergeTarget(undefined)
-    } catch (e: unknown) {
-      const err = e as { response?: { data?: { detail?: string } } }
-      message.error(err.response?.data?.detail || 'Merge failed')
     }
   }
 
@@ -850,33 +830,6 @@ export default function SitesPage() {
       </Modal>
 
       <Modal
-        title={`Merge "${mergingSite?.path}"`}
-        zIndex={1100}
-        open={!!mergingSite}
-        onCancel={() => setMergingSite(null)}
-        onOk={handleMerge}
-        okText="Merge"
-        okButtonProps={{ disabled: !mergeTarget, danger: true, loading: mergeSite.isPending }}
-        destroyOnClose
-      >
-        <Typography.Paragraph type="secondary">
-          Use this when two entries are the same place. All specimens, sub-sites and project tags move to the site you pick, and this site is deleted. Blank fields on the target are filled from this site.
-        </Typography.Paragraph>
-        <Select
-          showSearch
-          style={{ width: '100%' }}
-          placeholder="Merge into…"
-          value={mergeTarget}
-          onChange={setMergeTarget}
-          optionFilterProp="label"
-          options={(allSites ?? [])
-            .filter((s) => mergingSite && !subtreeIds(allSites ?? [], mergingSite.id).has(s.id))
-            .sort((a, b) => a.path.localeCompare(b.path))
-            .map((s) => ({ value: s.id, label: s.path }))}
-        />
-      </Modal>
-
-      <Modal
         title={`Edit — ${editingSite?.name}`}
         zIndex={1100}
         open={!!editingSite}
@@ -904,7 +857,6 @@ export default function SitesPage() {
           onClose={() => setSelectedSite(null)}
           onEdit={setEditingSite}
           onAddChild={(p) => { setNewParentId(p.id); setCreateOpen(true) }}
-          onMerge={(x) => { setMergingSite(x); setMergeTarget(undefined) }}
           onDelete={(x) =>
             deleteSite
               .mutateAsync(x.id)

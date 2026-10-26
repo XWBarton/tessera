@@ -95,3 +95,8 @@ class DuplicateMatch(BaseModel):
 
 class SiteMergeRequest(BaseModel):
     target_id: int
+
+
+class SiteMultiMergeRequest(BaseModel):
+    source_ids: List[int]
+    target_id: int
