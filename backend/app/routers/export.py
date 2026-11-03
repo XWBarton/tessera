@@ -115,11 +115,7 @@ def _specimens_to_csv(specimens) -> str:
             "last_used_date": str(max((u.date for u in s.usage_log if u.date), default="")) if s.usage_log else "",
         }
         for i, assoc in enumerate(s.species_associations, 1):
-            name = (
-                assoc.species.scientific_name
-                if assoc.species
-                else (assoc.free_text_species or "")
-            )
+            name = assoc.species.scientific_name if assoc.species else ""
             row[f"species_{i}_name"] = name
             row[f"species_{i}_life_stage"] = assoc.life_stage or ""
             row[f"species_{i}_sex"] = assoc.sex or ""

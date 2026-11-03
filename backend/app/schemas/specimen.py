@@ -1,5 +1,5 @@
 from datetime import date, datetime
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel
 from typing import Optional, List
 from .species import SpeciesRead
 from .user import UserRead
@@ -10,18 +10,11 @@ from .storage import StorageTrayRead
 
 
 class SpecimenSpeciesBase(BaseModel):
-    species_id: Optional[int] = None
-    free_text_species: Optional[str] = None
+    species_id: int
     specimen_count: Optional[int] = None
     life_stage: Optional[str] = None
     sex: Optional[str] = None
     confidence: str = "Unknown"
-
-    @model_validator(mode="after")
-    def check_species_or_free_text(self):
-        if self.species_id is None and not self.free_text_species:
-            raise ValueError("Either species_id or free_text_species must be provided")
-        return self
 
 
 class SpecimenSpeciesCreate(SpecimenSpeciesBase):
@@ -32,7 +25,6 @@ class SpecimenSpeciesRead(BaseModel):
     id: int
     specimen_id: int
     species_id: Optional[int] = None
-    free_text_species: Optional[str] = None
     specimen_count: Optional[int] = None
     life_stage: Optional[str] = None
     sex: Optional[str] = None
@@ -113,7 +105,7 @@ class SpecimenBulkImportRow(BaseModel):
     quantity_value: Optional[float] = None
     quantity_unit: Optional[str] = None
     notes: Optional[str] = None
-    species: Optional[str] = None  # semicolon-separated free-text species names
+    species: Optional[str] = None  # semicolon-separated taxon names; unknown names are added to the taxa table
 
 
 class SpecimenBulkImportRequest(BaseModel):
@@ -123,6 +115,7 @@ class SpecimenBulkImportRequest(BaseModel):
 class SpecimenBulkImportResult(BaseModel):
     created: int
     errors: List[str]
+    new_taxa: List[str] = []  # names added to the taxa table by this import
 
 
 class SpecimenRead(SpecimenBase):

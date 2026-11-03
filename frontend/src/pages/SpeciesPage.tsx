@@ -1,49 +1,21 @@
 import { useRef, useState } from 'react'
-import { Typography, Table, Button, Modal, Form, Input, Space, message, Popconfirm, Upload, Alert, Segmented } from 'antd'
+import { Typography, Table, Button, Modal, Form, Space, message, Popconfirm, Alert, Segmented } from 'antd'
 import { PlusOutlined, DeleteOutlined, EditOutlined, UploadOutlined, ApartmentOutlined, TableOutlined } from '@ant-design/icons'
-import { useSpecies, useCreateSpecies, useUpdateSpecies, useDeleteSpecies } from '../hooks/useSpecies'
+import { useSpecies, useUpdateSpecies, useDeleteSpecies } from '../hooks/useSpecies'
 import { useAuth } from '../context/AuthContext'
 import { importSpeciesCSV } from '../api/species'
 import { useQueryClient } from '@tanstack/react-query'
 import type { Species } from '../types'
 import SpeciesTree from '../components/species/SpeciesTree'
-
-// Shared set of form fields used by both the Add and Edit modals.
-function SpeciesFields() {
-  return (
-    <>
-      <Form.Item name="scientific_name" label="Scientific Name" rules={[{ required: true }]}>
-        <Input placeholder="e.g. Amblyomma triguttatum" />
-      </Form.Item>
-      <Form.Item name="common_name" label="Common Name">
-        <Input placeholder="e.g. Ornate Kangaroo Tick" />
-      </Form.Item>
-      <Form.Item name="genus" label="Genus">
-        <Input placeholder="e.g. Amblyomma" />
-      </Form.Item>
-      <Form.Item name="family" label="Family">
-        <Input placeholder="e.g. Ixodidae" />
-      </Form.Item>
-      <Form.Item name="order_name" label="Order">
-        <Input placeholder="e.g. Ixodida" />
-      </Form.Item>
-      <Form.Item name="taxon_id" label="Taxon ID">
-        <Input placeholder="e.g. NCBI:123456" />
-      </Form.Item>
-      <Form.Item name="notes" label="Notes">
-        <Input.TextArea rows={2} />
-      </Form.Item>
-    </>
-  )
-}
+import { AddTaxonModal, RankTag, SpeciesFields, normaliseTaxon, type TaxonValues } from '../components/species/TaxonForm'
 
 export default function SpeciesPage() {
   const { user } = useAuth()
   const { data: species, isLoading } = useSpecies()
-  const createSpecies = useCreateSpecies()
   const deleteSpecies = useDeleteSpecies()
   const queryClient = useQueryClient()
-  const [modalOpen, setModalOpen] = useState(false)
+  // undefined = closed; an object (possibly empty) = open with those values pre-filled
+  const [addInitial, setAddInitial] = useState<TaxonValues | undefined>(undefined)
   const [editingSpecies, setEditingSpecies] = useState<Species | null>(null)
   const updateSpecies = useUpdateSpecies(editingSpecies?.id ?? 0)
   const [importModalOpen, setImportModalOpen] = useState(false)
@@ -51,7 +23,6 @@ export default function SpeciesPage() {
   const [importResult, setImportResult] = useState<{ created: number; skipped: number; errors: string[] } | null>(null)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const [form] = Form.useForm()
   const [view, setView] = useState<'tree' | 'table'>(() => {
     try { return localStorage.getItem('speciesView') === 'tree' ? 'tree' : 'table' } catch { return 'table' }
   })
@@ -60,21 +31,9 @@ export default function SpeciesPage() {
     try { localStorage.setItem('speciesView', v) } catch { /* per-viewer convenience only */ }
   }
 
-  const handleCreate = async (values: { scientific_name: string; common_name?: string; notes?: string; genus?: string; family?: string; order_name?: string; taxon_id?: string }) => {
+  const handleEdit = async (values: TaxonValues) => {
     try {
-      await createSpecies.mutateAsync(values)
-      message.success('Species added')
-      setModalOpen(false)
-      form.resetFields()
-    } catch (e: unknown) {
-      const err = e as { response?: { data?: { detail?: string } } }
-      message.error(err.response?.data?.detail || 'Failed to add species')
-    }
-  }
-
-  const handleEdit = async (values: { scientific_name: string; common_name?: string; notes?: string; genus?: string; family?: string; order_name?: string; taxon_id?: string }) => {
-    try {
-      await updateSpecies.mutateAsync(values)
+      await updateSpecies.mutateAsync(normaliseTaxon(values))
       message.success('Species updated')
       setEditingSpecies(null)
     } catch (e: unknown) {
@@ -114,7 +73,7 @@ export default function SpeciesPage() {
       title: 'Scientific Name',
       dataIndex: 'scientific_name',
       key: 'scientific_name',
-      render: (v: string) => <em>{v}</em>,
+      render: (v: string, record: Species) => <><em>{v}</em><RankTag rank={record.rank} /></>,
     },
     {
       title: 'Common Name',
@@ -192,15 +151,13 @@ export default function SpeciesPage() {
             ]}
           />
         {user?.is_admin && (
-          <>
-            <Button icon={<UploadOutlined />} onClick={() => setImportModalOpen(true)}>
-              Import CSV
-            </Button>
-            <Button type="primary" icon={<PlusOutlined />} onClick={() => setModalOpen(true)}>
-              Add Species
-            </Button>
-          </>
+          <Button icon={<UploadOutlined />} onClick={() => setImportModalOpen(true)}>
+            Import CSV
+          </Button>
         )}
+        <Button type="primary" icon={<PlusOutlined />} onClick={() => setAddInitial({})}>
+          Add Taxon
+        </Button>
         </Space>
       </div>
       {view === 'tree' ? (
@@ -208,6 +165,7 @@ export default function SpeciesPage() {
           species={species ?? []}
           canEdit={!!user?.is_admin}
           onEdit={setEditingSpecies}
+          onAddUnder={setAddInitial}
           onDelete={(s) =>
             deleteSpecies
               .mutateAsync(s.id)
@@ -219,18 +177,7 @@ export default function SpeciesPage() {
         <Table dataSource={species} columns={columns} rowKey="id" loading={isLoading} />
       )}
 
-      {/* Add single species modal */}
-      <Modal title="Add Species" open={modalOpen} onCancel={() => setModalOpen(false)} footer={null}>
-        <Form form={form} layout="vertical" onFinish={handleCreate}>
-          <SpeciesFields />
-          <Form.Item>
-            <Space>
-              <Button type="primary" htmlType="submit" loading={createSpecies.isPending}>Add</Button>
-              <Button onClick={() => setModalOpen(false)}>Cancel</Button>
-            </Space>
-          </Form.Item>
-        </Form>
-      </Modal>
+      <AddTaxonModal open={!!addInitial} initial={addInitial} onClose={() => setAddInitial(undefined)} />
 
       {/* Edit species modal */}
       <Modal
@@ -276,7 +223,8 @@ export default function SpeciesPage() {
             <Typography.Text type="secondary">
               Upload a CSV with a <code>scientific_name</code> column. Optional columns:{' '}
               <code>common_name</code>, <code>genus</code>, <code>family</code>,{' '}
-              <code>order_name</code>, <code>taxon_id</code>, <code>notes</code>.
+              <code>order_name</code>, <code>taxon_id</code>, <code>notes</code>,{' '}
+              <code>rank</code> (species, genus, family or order; defaults to species).
               Rows with duplicate scientific names are skipped.
             </Typography.Text>
             <input

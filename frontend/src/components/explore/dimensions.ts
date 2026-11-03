@@ -19,7 +19,7 @@ const uniq = (xs: string[]) => (xs.length ? Array.from(new Set(xs)) : [NONE])
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
 export const speciesName = (a: SpecimenSpecies) =>
-  a.species?.scientific_name || a.free_text_species?.trim() || 'Unknown species'
+  a.species?.scientific_name || 'Unknown species'
 
 const taxon = (rank: 'order' | 'family' | 'genus') => (a: SpecimenSpecies) =>
   a.species ? rankValue(a.species, rank) : 'Unassigned'

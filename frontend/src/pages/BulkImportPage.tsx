@@ -15,6 +15,7 @@ import {
   Input,
 } from 'antd'
 import { UploadOutlined, DownloadOutlined, PlusOutlined, DeleteOutlined } from '@ant-design/icons'
+import { Link } from 'react-router-dom'
 import { bulkImportSpecimens } from '../api/specimens'
 import { bulkImportSites } from '../api/sites'
 import type { SiteBulkImportRow, SiteBulkImportResult } from '../api/sites'
@@ -679,6 +680,9 @@ export default function BulkImportPage() {
             Confidence: <code>Confirmed</code>, <code>Probable</code>, <code>Possible</code>,{' '}
             <code>Unknown</code> (default).
             <br />
+            Names are matched to the taxa list; a name not on the list is added to it (e.g.{' '}
+            <code>Ixodes sp.</code> becomes a genus-level entry), so check the Species page afterwards.
+            <br />
             <span style={{ color: '#888', fontSize: 12 }}>
               e.g. <code>Rana temporaria|4|adult|F|Confirmed;Bufo bufo|2|instar 3||Probable</code>
             </span>
@@ -771,6 +775,20 @@ export default function BulkImportPage() {
             <ul style={{ margin: 0, paddingLeft: 20, fontSize: 13, color: '#cf1322' }}>
               {result.errors.map((e, i) => <li key={i}>{e}</li>)}
             </ul>
+          )}
+          {!!result.new_taxa?.length && (
+            <Alert
+              type="info"
+              showIcon
+              style={{ marginTop: 12 }}
+              message={`${result.new_taxa.length} new ${result.new_taxa.length === 1 ? 'taxon' : 'taxa'} added to the species list`}
+              description={
+                <>
+                  {result.new_taxa.map((n, i) => <span key={n}>{i > 0 && ', '}<em>{n}</em></span>)}
+                  . Fill in their genus, family and order on the <Link to="/species">Species page</Link> so they group correctly.
+                </>
+              }
+            />
           )}
         </Card>
       )}

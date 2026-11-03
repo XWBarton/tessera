@@ -142,7 +142,7 @@ export default function HelpPage() {
                   },
                   {
                     title: 'Add species associations',
-                    description: 'Search the species list or type free text. Record count, life stage, sex, and confidence per association. A tube can have multiple species.',
+                    description: 'Pick a taxon from the species list. If it is not there, choose "Add … to taxa" to create it. When you can only identify as far as genus or family, use an entry such as "Ixodes sp." and put your doubt in the confidence (Possible / Probable). Record count, life stage, sex, and confidence per association. A tube can have multiple species.',
                   },
                   { title: 'Save', description: 'The tube is now searchable and ready to manage.' },
                 ]}

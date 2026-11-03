@@ -27,7 +27,7 @@ export default function SpecimensBySpecies({ specimens, data: dataProp }: Props)
         counts['No species'] = (counts['No species'] || 0) + 1
       } else {
         s.species_associations.forEach((a) => {
-          const key = a.species?.scientific_name || a.free_text_species || 'Unknown'
+          const key = a.species?.scientific_name || 'Unknown'
           counts[key] = (counts[key] || 0) + 1
         })
       }

@@ -115,7 +115,7 @@ const CONFIDENCE_COLORS: Record<string, string> = {
 }
 
 function assocLabel(a: SpecimenSpecies): string {
-  const name = a.species?.scientific_name || a.free_text_species || 'Unknown'
+  const name = a.species?.scientific_name || 'Unknown'
   const parts = [name, a.life_stage, a.sex].filter(Boolean)
   return parts.join(' ')
 }
@@ -448,7 +448,7 @@ export default function SpecimenDetailPage() {
       title: 'Species',
       key: 'name',
       render: (_: unknown, r: SpecimenSpecies) =>
-        r.species ? <em>{r.species.scientific_name}</em> : r.free_text_species,
+        r.species ? <em>{r.species.scientific_name}</em> : '—',
     },
     {
       title: 'Common Name',
@@ -797,7 +797,7 @@ export default function SpecimenDetailPage() {
             {specimen.species_associations.length === 0 ? '—' : (() => {
               const seen = new Set<string>()
               const unique = specimen.species_associations.filter((a) => {
-                const name = a.species?.scientific_name || a.free_text_species || ''
+                const name = a.species?.scientific_name || ''
                 if (!name || seen.has(name)) return false
                 seen.add(name)
                 return true
@@ -806,7 +806,7 @@ export default function SpecimenDetailPage() {
                 <Space size={4} wrap>
                   {unique.map((a) => (
                     <Tag key={a.id} color={CONFIDENCE_COLORS[a.confidence]}>
-                      <em>{a.species?.scientific_name || a.free_text_species}</em>
+                      <em>{a.species?.scientific_name}</em>
                     </Tag>
                   ))}
                 </Space>
@@ -890,7 +890,7 @@ export default function SpecimenDetailPage() {
                   <div key={i} style={{ display: 'flex', alignItems: 'center', marginBottom: 10, gap: 8 }}>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: 13 }}>
-                        <em>{a.species?.scientific_name || a.free_text_species}</em>
+                        <em>{a.species?.scientific_name}</em>
                       </div>
                       <div style={{ fontSize: 12, color: '#555', marginTop: 1 }}>
                         {lifeStageSex || <span style={{ color: '#aaa' }}>No life stage / sex recorded</span>}
@@ -1114,7 +1114,7 @@ export default function SpecimenDetailPage() {
                   <div key={i} style={{ display: 'flex', alignItems: 'center', marginBottom: 10, gap: 8 }}>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: 13 }}>
-                        <em>{a.species?.scientific_name || a.free_text_species}</em>
+                        <em>{a.species?.scientific_name}</em>
                       </div>
                       <div style={{ fontSize: 12, color: '#555', marginTop: 1 }}>
                         {lifeStageSex || <span style={{ color: '#aaa' }}>No life stage / sex recorded</span>}

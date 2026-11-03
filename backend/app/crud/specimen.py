@@ -304,7 +304,6 @@ def _create_specimen_attempt(
         db_assoc = SpecimenSpecies(
             specimen_id=db_specimen.id,
             species_id=assoc.species_id,
-            free_text_species=assoc.free_text_species,
             specimen_count=assoc.specimen_count,
             life_stage=assoc.life_stage,
             sex=assoc.sex,
@@ -434,7 +433,6 @@ def update_specimen(
             db_assoc = SpecimenSpecies(
                 specimen_id=specimen.id,
                 species_id=assoc.species_id,
-                free_text_species=assoc.free_text_species,
                 specimen_count=assoc.specimen_count,
                 life_stage=assoc.life_stage,
                 sex=assoc.sex,

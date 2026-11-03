@@ -16,6 +16,8 @@ class Species(Base):
     family: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     order_name: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     taxon_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    # Level the identification reaches: species, genus ("Ixodes sp."), family or order
+    rank: Mapped[str] = mapped_column(String(20), nullable=False, default="species", server_default="species")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     specimen_associations = relationship("SpecimenSpecies", back_populates="species")

@@ -97,7 +97,7 @@ export default function MapPage() {
                 {s.project?.code}
                 <br />
                 <em>
-                  {first?.species?.scientific_name || first?.free_text_species || 'Unknown species'}
+                  {first?.species?.scientific_name || 'Unknown species'}
                 </em>
                 <br />
                 {s.collection_date}

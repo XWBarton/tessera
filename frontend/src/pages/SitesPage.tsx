@@ -537,7 +537,7 @@ function SiteDrawer({ site, sites, isAdmin, onClose, onEdit, onAddChild, onDelet
       key: 'species',
       render: (_: unknown, r: Specimen) => {
         const first = r.species_associations[0]
-        return first ? <em style={{ fontSize: 12 }}>{first.species?.scientific_name || first.free_text_species}</em> : '—'
+        return first ? <em style={{ fontSize: 12 }}>{first.species?.scientific_name}</em> : '—'
       },
     },
     { title: 'Sample Type', key: 'sample_type', render: (_: unknown, r: Specimen) => r.sample_type?.name ?? '—' },

@@ -19,6 +19,8 @@ export interface Project {
   is_protected?: boolean
 }
 
+export type TaxonRank = 'species' | 'genus' | 'family' | 'order'
+
 export interface Species {
   id: number
   scientific_name: string
@@ -28,6 +30,8 @@ export interface Species {
   family?: string
   order_name?: string
   taxon_id?: string
+  /** How far the identification goes; genus-level entries are named like "Ixodes sp." */
+  rank: TaxonRank
   created_at: string
 }
 
@@ -102,7 +106,6 @@ export interface SpecimenSpecies {
   id: number
   specimen_id: number
   species_id?: number
-  free_text_species?: string
   specimen_count?: number
   life_stage?: string
   sex?: string
@@ -163,7 +166,6 @@ export interface Token {
 
 export interface SpecimenSpeciesCreate {
   species_id?: number | null
-  free_text_species?: string
   specimen_count?: number | null
   life_stage?: string | null
   sex?: string | null
@@ -239,6 +241,8 @@ export interface BulkImportRow {
 export interface BulkImportResult {
   created: number
   errors: string[]
+  /** Species names not yet in the taxa table, added by this import */
+  new_taxa?: string[]
 }
 
 export interface SampleType {

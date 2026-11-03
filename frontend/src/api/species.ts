@@ -1,5 +1,6 @@
 import apiClient from './client'
 import type { Species } from '../types'
+import type { TaxonValues } from '../components/species/TaxonForm'
 
 export const getSpecies = async (q?: string): Promise<Species[]> => {
   const { data } = await apiClient.get<Species[]>('/species/', {
@@ -8,18 +9,12 @@ export const getSpecies = async (q?: string): Promise<Species[]> => {
   return data
 }
 
-export const createSpecies = async (species: {
-  scientific_name: string
-  common_name?: string
-  notes?: string
-}): Promise<Species> => {
+export const createSpecies = async (species: TaxonValues & { scientific_name: string }): Promise<Species> => {
   const { data } = await apiClient.post<Species>('/species/', species)
   return data
 }
 
-export type SpeciesInput = Partial<
-  Pick<Species, 'scientific_name' | 'common_name' | 'notes' | 'genus' | 'family' | 'order_name' | 'taxon_id'>
->
+export type SpeciesInput = TaxonValues
 
 export const updateSpecies = async (
   id: number,

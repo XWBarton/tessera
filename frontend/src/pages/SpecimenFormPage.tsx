@@ -185,7 +185,6 @@ export default function SpecimenFormPage() {
         notes: specimen.notes,
         species_associations: specimen.species_associations.map((a) => ({
           species_id: a.species_id,
-          free_text_species: a.free_text_species,
           specimen_count: a.specimen_count ?? null,
           life_stage: a.life_stage ?? null,
           sex: a.sex ?? null,
@@ -231,7 +230,7 @@ export default function SpecimenFormPage() {
       : undefined
     const speciesAssociations = (
       (values.species_associations as SpecimenSpeciesCreate[]) || []
-    ).filter((a) => a.species_id || a.free_text_species)
+    ).filter((a) => a.species_id)
 
     const collectorId = collectorMode === 'user' ? (values.collector_id as number | undefined) : undefined
     const collectorName = collectorMode === 'name' ? (values.collector_name as string | undefined) : undefined

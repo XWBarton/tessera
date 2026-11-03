@@ -23,7 +23,7 @@ def _occupant_label(specimen) -> str:
     )
     if not primary:
         return ""
-    return primary.species.scientific_name if primary.species else (primary.free_text_species or "")
+    return primary.species.scientific_name if primary.species else ""
 
 
 @router.get("/units", response_model=List[StorageUnitRead])

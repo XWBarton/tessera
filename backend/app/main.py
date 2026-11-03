@@ -61,6 +61,7 @@ def run_migrations():
             ("species", "family", "TEXT", None),
             ("species", "order_name", "TEXT", None),
             ("species", "taxon_id", "TEXT", None),
+            ("species", "rank", "VARCHAR(20) NOT NULL DEFAULT 'species'", None),
             ("specimens", "storage_tray_id", "INTEGER REFERENCES storage_trays(id)", None),
             ("specimens", "storage_position", "INTEGER", None),
         ]
@@ -226,6 +227,48 @@ def run_migrations():
             conn.execute(text("ALTER TABLE specimens_new RENAME TO specimens"))
             conn.commit()
             print("[tessera] Migration: made specimens.collector_id nullable")
+
+        migrate_free_text_species(conn)
+
+
+def migrate_free_text_species(conn):
+    """Free-text species names are gone: link every one to a taxa-table row (creating rows
+    as needed), then drop the column. Safe to re-run; does nothing once the column is gone."""
+    from .crud.species import guess_taxon_fields
+
+    cols = {row[1] for row in conn.execute(text("PRAGMA table_info(specimen_species)")).fetchall()}
+    if "free_text_species" not in cols:
+        return
+    names = [r[0] for r in conn.execute(text("""
+        SELECT DISTINCT TRIM(free_text_species) FROM specimen_species
+        WHERE species_id IS NULL AND free_text_species IS NOT NULL AND TRIM(free_text_species) != ''
+    """)).fetchall()]
+    created = 0
+    for name in names:
+        row = conn.execute(
+            text("SELECT id FROM species WHERE LOWER(scientific_name) = LOWER(:n)"), {"n": name}
+        ).fetchone()
+        if row:
+            sid = row[0]
+        else:
+            f = guess_taxon_fields(name)
+            sid = conn.execute(
+                text("""INSERT INTO species (scientific_name, genus, family, rank, created_at)
+                        VALUES (:n, :g, :f, :r, CURRENT_TIMESTAMP)"""),
+                {"n": name, "g": f.get("genus"), "f": f.get("family"), "r": f["rank"]},
+            ).lastrowid
+            created += 1
+        conn.execute(
+            text("""UPDATE specimen_species SET species_id = :sid
+                    WHERE species_id IS NULL AND TRIM(free_text_species) = :n"""),
+            {"sid": sid, "n": name},
+        )
+    # Associations with neither a taxon nor a name carry no information
+    orphans = conn.execute(text("DELETE FROM specimen_species WHERE species_id IS NULL")).rowcount
+    conn.execute(text("ALTER TABLE specimen_species DROP COLUMN free_text_species"))
+    conn.commit()
+    print(f"[tessera] Migration: linked {len(names)} free-text name(s) to taxa "
+          f"({created} new), removed {orphans} empty association(s), dropped free_text_species")
 
 
 def seed_admin():

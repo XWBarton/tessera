@@ -1,6 +1,8 @@
 from datetime import datetime
 from pydantic import BaseModel
-from typing import Optional
+from typing import Literal, Optional
+
+Rank = Literal["species", "genus", "family", "order"]
 
 
 class SpeciesBase(BaseModel):
@@ -11,6 +13,7 @@ class SpeciesBase(BaseModel):
     family: Optional[str] = None
     order_name: Optional[str] = None
     taxon_id: Optional[str] = None
+    rank: Rank = "species"
 
 
 class SpeciesCreate(SpeciesBase):
@@ -25,6 +28,7 @@ class SpeciesUpdate(BaseModel):
     family: Optional[str] = None
     order_name: Optional[str] = None
     taxon_id: Optional[str] = None
+    rank: Optional[Rank] = None
 
 
 class SpeciesRead(SpeciesBase):

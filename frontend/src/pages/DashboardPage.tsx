@@ -118,7 +118,7 @@ function RecentAdditions({ specimens }: { specimens: Specimen[] }) {
         {
           title: 'Species', key: 'species',
           render: (_, r) => r.species_associations[0]?.species?.scientific_name
-            || r.species_associations[0]?.free_text_species || '—',
+            || '—',
         },
         { title: 'Collected', dataIndex: 'collection_date', key: 'date', render: (v) => v || '—' },
         { title: 'Added', dataIndex: 'created_at', key: 'added', render: (v: string) => new Date(v).toLocaleDateString() },

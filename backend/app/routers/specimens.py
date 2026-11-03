@@ -50,6 +50,7 @@ from ..models.specimen_photo import SpecimenPhoto
 from ..models.user import User
 from ..models.site import Site
 from ..crud.site import resolve_site_ref
+from ..crud.species import get_or_create_species_by_name
 from ..models.sample_type import SampleType
 from ..models.species import Species as SpeciesModel
 from ..models.project import Project as ProjectModel
@@ -138,7 +139,7 @@ def _label_fields(specimen):
     first = specimen.species_associations[0] if specimen.species_associations else None
     species = ""
     if first:
-        species = first.species.scientific_name if first.species else (first.free_text_species or "")
+        species = first.species.scientific_name if first.species else ""
     return {
         "code": specimen.specimen_code,
         "project": specimen.project.code if specimen.project else "",
@@ -237,9 +238,7 @@ def _get_label_row(specimen) -> dict:
     primary = next((a for a in specimen.species_associations if a.is_primary), None)
     species_name = ""
     if primary:
-        species_name = (
-            primary.species.scientific_name if primary.species else (primary.free_text_species or "")
-        )
+        species_name = primary.species.scientific_name if primary.species else ""
     return {
         "specimen_code": specimen.specimen_code,
         "project_code": specimen.project.code if specimen.project else "",
@@ -456,12 +455,12 @@ def get_specimen_stats(
     # By species
     by_species_rows = (
         db.query(
-            sql_func.coalesce(SpeciesModel.scientific_name, SpecimenSpeciesModel.free_text_species, "Unknown"),
+            sql_func.coalesce(SpeciesModel.scientific_name, "Unknown"),
             sql_func.count(SpecimenModel.id.distinct())
         )
         .join(SpecimenSpeciesModel, SpecimenSpeciesModel.specimen_id == SpecimenModel.id)
         .outerjoin(SpeciesModel, SpecimenSpeciesModel.species_id == SpeciesModel.id)
-        .group_by(sql_func.coalesce(SpeciesModel.scientific_name, SpecimenSpeciesModel.free_text_species, "Unknown"))
+        .group_by(sql_func.coalesce(SpeciesModel.scientific_name, "Unknown"))
         .order_by(sql_func.count(SpecimenModel.id.distinct()).desc())
         .limit(20)
         .all()
@@ -822,7 +821,7 @@ def record_usage(
             # if there's only one and no breakdown.
             if not dest.species_associations:
                 def _assoc_label(a) -> str:
-                    name = (a.species.scientific_name if a.species else None) or a.free_text_species or 'Unknown'
+                    name = a.species.scientific_name if a.species else 'Unknown'
                     return ' '.join(p for p in [name, a.life_stage, a.sex] if p)
 
                 if usage.breakdown:
@@ -833,7 +832,6 @@ def record_usage(
                             db.add(SpecimenSpeciesModel(
                                 specimen_id=dest.id,
                                 species_id=src_assoc.species_id,
-                                free_text_species=src_assoc.free_text_species,
                                 specimen_count=breakdown_map[label],
                                 life_stage=src_assoc.life_stage,
                                 sex=src_assoc.sex,
@@ -844,7 +842,6 @@ def record_usage(
                     db.add(SpecimenSpeciesModel(
                         specimen_id=dest.id,
                         species_id=src_assoc.species_id,
-                        free_text_species=src_assoc.free_text_species,
                         specimen_count=int(usage.quantity_taken) if usage.quantity_taken else src_assoc.specimen_count,
                         life_stage=src_assoc.life_stage,
                         sex=src_assoc.sex,
@@ -922,11 +919,15 @@ def bulk_import_specimens(
     current_user: User = Depends(require_admin),
 ):
     from sqlalchemy import func as sqlfunc
+    from ..models.specimen import Specimen
+    from ..models.specimen_species import SpecimenSpecies
     created = 0
     errors: List[str] = []
+    new_taxa: List[str] = []  # names not in the taxa table, added during this import
 
     for i, row in enumerate(body.rows):
         row_num = i + 1
+        row_new_taxa: List[str] = []  # only kept if the row's savepoint commits
         try:
             with db.begin_nested():
                 project = db.query(ProjectModel).filter(ProjectModel.code == row.project_code).first()
@@ -1015,13 +1016,12 @@ def bulk_import_specimens(
                         life_stage = parts[2] if len(parts) > 2 and parts[2] else None
                         sex = parts[3] if len(parts) > 3 and parts[3] else None
                         confidence = parts[4] if len(parts) > 4 and parts[4] in valid_confidences else 'Unknown'
-                        sp = db.query(SpeciesModel).filter(
-                            SpeciesModel.scientific_name == sp_name
-                        ).first()
+                        sp, was_created = get_or_create_species_by_name(db, sp_name)
+                        if was_created:
+                            row_new_taxa.append(sp.scientific_name)
                         assoc = SpecimenSpecies(
                             specimen_id=db_specimen.id,
-                            species_id=sp.id if sp else None,
-                            free_text_species=None if sp else sp_name,
+                            species_id=sp.id,
                             specimen_count=sp_count,
                             life_stage=life_stage,
                             sex=sex,
@@ -1031,11 +1031,12 @@ def bulk_import_specimens(
                         db.add(assoc)
 
                 created += 1
+            new_taxa.extend(row_new_taxa)
         except Exception as e:
             errors.append(f"Row {row_num} ({row.specimen_code}): {str(e)}")
 
     db.commit()
-    return {"created": created, "errors": errors}
+    return {"created": created, "errors": errors, "new_taxa": new_taxa}
 
 
 @router.post("/bulk-label")

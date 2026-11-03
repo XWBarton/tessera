@@ -37,7 +37,7 @@ def list_species(
 def create_new_species(
     species: SpeciesCreate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_admin),
+    _: User = Depends(get_current_user),  # anyone may add a taxon; editing/deleting is admin-only
 ):
     if get_species_by_name(db, species.scientific_name):
         raise HTTPException(

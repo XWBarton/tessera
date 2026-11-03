@@ -1,3 +1,4 @@
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from ..models.species import Species
 from ..schemas.species import SpeciesCreate, SpeciesUpdate
@@ -10,6 +11,33 @@ def get_species(db: Session, species_id: int) -> Optional[Species]:
 
 def get_species_by_name(db: Session, scientific_name: str) -> Optional[Species]:
     return db.query(Species).filter(Species.scientific_name == scientific_name).first()
+
+
+def guess_taxon_fields(name: str) -> dict:
+    """Best-guess rank/genus for a bare name: 'Ixodes sp.' is a genus-level entry,
+    'Ixodes holocyclus' a species in genus Ixodes. Anything else is left for a person to fill in."""
+    name = name.strip()
+    words = name.split()
+    if len(words) == 2 and words[1].lower() in ("sp", "sp.", "spp", "spp."):
+        if words[0].lower().endswith(("idae", "aceae")):
+            return {"rank": "family", "family": words[0]}
+        return {"rank": "genus", "genus": words[0]}
+    if len(words) >= 2 and words[0][:1].isupper() and words[1][:1].islower():
+        return {"rank": "species", "genus": words[0]}
+    return {"rank": "species"}
+
+
+def get_or_create_species_by_name(db: Session, name: str) -> tuple[Species, bool]:
+    """Find a taxon by exact (case-insensitive) name, or add it with guessed rank.
+    Flushes but does not commit. Returns (species, created)."""
+    name = name.strip()
+    existing = db.query(Species).filter(func.lower(Species.scientific_name) == name.lower()).first()
+    if existing:
+        return existing, False
+    sp = Species(scientific_name=name, **guess_taxon_fields(name))
+    db.add(sp)
+    db.flush()
+    return sp, True
 
 
 def search_species(db: Session, q: str = "", skip: int = 0, limit: int = 20) -> List[Species]:
@@ -73,6 +101,7 @@ def bulk_create_species(db: Session, rows: list[dict]) -> dict:
                 family=(row.get("family") or "").strip() or None,
                 order_name=(row.get("order_name") or "").strip() or None,
                 taxon_id=(row.get("taxon_id") or "").strip() or None,
+                rank=r if (r := (row.get("rank") or "").strip().lower()) in ("species", "genus", "family", "order") else "species",
                 notes=(row.get("notes") or "").strip() or None,
             )
             db.add(db_species)
