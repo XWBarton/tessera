@@ -18,7 +18,7 @@ from ..crud.specimen import (
     delete_specimen,
 )
 from ..crud.project import get_project
-from ..crud.storage import get_tray
+from ..crud.storage import get_tray, get_position_occupants
 from ..crud.tube_usage_log import get_usage_log, create_usage_event, update_usage_event, delete_usage_event
 from ..models.specimen_species import SpecimenSpecies as SpecimenSpeciesModel
 from ..schemas.specimen import (
@@ -64,7 +64,10 @@ MAX_PHOTO_SIZE_BYTES = 20 * 1024 * 1024  # 20 MB
 router = APIRouter(prefix="/specimens", tags=["specimens"])
 
 
-def _validate_storage_position(db: Session, tray_id: Optional[int], position: Optional[int]) -> None:
+def _validate_storage_position(
+    db: Session, tray_id: Optional[int], position: Optional[int],
+    exclude_specimen_id: Optional[int] = None, check_occupancy: bool = True,
+) -> None:
     if tray_id is None:
         if position is not None:
             raise HTTPException(status_code=400, detail="storage_position requires a storage_tray_id")
@@ -74,6 +77,11 @@ def _validate_storage_position(db: Session, tray_id: Optional[int], position: Op
         raise HTTPException(status_code=404, detail="Storage tray not found")
     if position is not None and not (1 <= position <= tray.capacity):
         raise HTTPException(status_code=400, detail=f"Position must be between 1 and {tray.capacity}")
+    if position is not None and check_occupancy:
+        occupants = [o for o in get_position_occupants(db, tray_id, position) if o.id != exclude_specimen_id]
+        if occupants:
+            codes = ", ".join(o.specimen_code for o in occupants)
+            raise HTTPException(status_code=409, detail=f"Position {position} is already occupied by {codes}")
 
 
 def _has_access(project, user) -> bool:
@@ -628,10 +636,15 @@ def update_existing_specimen(
     ):
         raise HTTPException(status_code=403, detail="Only admins can move tubes between projects")
     provided = specimen_update.model_dump(exclude_unset=True)
+    new_tray_id = provided.get("storage_tray_id", specimen.storage_tray_id)
+    new_position = provided.get("storage_position", specimen.storage_position)
+    location_changed = (new_tray_id, new_position) != (specimen.storage_tray_id, specimen.storage_position)
     _validate_storage_position(
         db,
-        provided.get("storage_tray_id", specimen.storage_tray_id),
-        provided.get("storage_position", specimen.storage_position),
+        new_tray_id,
+        new_position,
+        exclude_specimen_id=specimen.id,
+        check_occupancy=location_changed,
     )
     try:
         return update_specimen(db, specimen, specimen_update)

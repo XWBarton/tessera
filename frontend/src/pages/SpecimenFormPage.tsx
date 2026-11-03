@@ -63,6 +63,10 @@ export default function SpecimenFormPage() {
   const { data: trayPositions } = useStorageTrayPositions(watchedTrayId ?? 0)
   const positionOccupants = (trayPositions?.find((p) => p.position === watchedPosition)?.occupants ?? [])
     .filter((o) => !isEdit || o.id !== specimenId)
+  // Unchanged location on edit is allowed even if legacy data already shares it.
+  const locationUnchanged = isEdit && !!specimen
+    && watchedTrayId === specimen.storage_tray_id && watchedPosition === specimen.storage_position
+  const positionBlocked = positionOccupants.length > 0 && !locationUnchanged
 
   // Watch species associations to derive total count
   const watchedAssociations: SpecimenSpeciesCreate[] = Form.useWatch('species_associations', form) || []
@@ -573,7 +577,16 @@ export default function SpecimenFormPage() {
               </Form.Item>
             </Col>
             <Col span={12}>
-              <Form.Item name="storage_position" label="Position" help={selectedTray ? `1–${selectedTray.capacity}` : undefined}>
+              <Form.Item
+                name="storage_position"
+                label="Position"
+                help={positionBlocked ? undefined : selectedTray ? `1–${selectedTray.capacity}` : undefined}
+                rules={[{
+                  validator: () => positionBlocked
+                    ? Promise.reject(new Error(`Position ${watchedPosition} is already occupied`))
+                    : Promise.resolve(),
+                }]}
+              >
                 <InputNumber
                   style={{ width: '100%' }}
                   min={1}
@@ -584,13 +597,13 @@ export default function SpecimenFormPage() {
               </Form.Item>
             </Col>
           </Row>
-          {positionOccupants.length > 0 && (
+          {positionBlocked && (
             <Alert
-              type="warning"
+              type="error"
               showIcon
               style={{ marginBottom: 16 }}
               message={`Position ${watchedPosition} already holds: ${positionOccupants.map((o) => o.specimen_code).join(', ')}`}
-              description="Saving will add this tube to the same position — only do this if they genuinely share one physical tube."
+              description="Choose an empty position."
             />
           )}
 
