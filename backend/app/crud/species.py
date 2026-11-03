@@ -27,6 +27,38 @@ def guess_taxon_fields(name: str) -> dict:
     return {"rank": "species"}
 
 
+RANK_COLUMN = {"genus": Species.genus, "family": Species.family, "order": Species.order_name}
+
+
+def get_or_create_at_rank(db: Session, rank: str, value: str) -> Optional[Species]:
+    """The genus/family/order-level taxon ("Ixodes sp.") for a group already in the taxa table,
+    created on first use with the higher ranks copied from an existing member.
+    Returns None if no taxon belongs to that group."""
+    col = RANK_COLUMN[rank]
+    value = value.strip()
+    existing = db.query(Species).filter(Species.rank == rank, func.lower(col) == value.lower()).first()
+    if existing:
+        return existing
+    ref = db.query(Species).filter(func.lower(col) == value.lower()).first()
+    if not ref:
+        return None
+    name = f"{getattr(ref, 'order_name' if rank == 'order' else rank)} sp."
+    by_name = db.query(Species).filter(func.lower(Species.scientific_name) == name.lower()).first()
+    if by_name:
+        return by_name
+    sp = Species(
+        scientific_name=name,
+        rank=rank,
+        genus=ref.genus if rank == "genus" else None,
+        family=ref.family if rank in ("genus", "family") else None,
+        order_name=ref.order_name,
+    )
+    db.add(sp)
+    db.commit()
+    db.refresh(sp)
+    return sp
+
+
 def get_or_create_species_by_name(db: Session, name: str) -> tuple[Species, bool]:
     """Find a taxon by exact (case-insensitive) name, or add it with guessed rank.
     Flushes but does not commit. Returns (species, created)."""
@@ -43,9 +75,13 @@ def get_or_create_species_by_name(db: Session, name: str) -> tuple[Species, bool
 def search_species(db: Session, q: str = "", skip: int = 0, limit: int = 20) -> List[Species]:
     query = db.query(Species)
     if q:
+        like = f"%{q}%"
         query = query.filter(
-            Species.scientific_name.ilike(f"%{q}%") |
-            Species.common_name.ilike(f"%{q}%")
+            Species.scientific_name.ilike(like) |
+            Species.common_name.ilike(like) |
+            Species.genus.ilike(like) |
+            Species.family.ilike(like) |
+            Species.order_name.ilike(like)
         )
     return query.order_by(Species.scientific_name).offset(skip).limit(limit).all()
 

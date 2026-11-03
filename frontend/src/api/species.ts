@@ -16,6 +16,12 @@ export const createSpecies = async (species: TaxonValues & { scientific_name: st
 
 export type SpeciesInput = TaxonValues
 
+/** The "<Genus> sp." taxon for a genus/family already in the list, created on first use. */
+export const getSpeciesAtRank = async (rank: 'genus' | 'family', name: string): Promise<Species> => {
+  const { data } = await apiClient.post<Species>('/species/at-rank', { rank, name })
+  return data
+}
+
 export const updateSpecies = async (
   id: number,
   updates: SpeciesInput

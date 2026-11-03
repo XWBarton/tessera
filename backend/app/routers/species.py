@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
 from ..dependencies import get_db, get_current_user, require_admin
 from ..crud.species import (
+    get_or_create_at_rank,
     get_species,
     search_species,
     get_all_species,
@@ -15,7 +16,8 @@ from ..crud.species import (
 )
 from ..schemas.species import SpeciesRead, SpeciesCreate, SpeciesUpdate
 from ..models.user import User
-from typing import List, Optional
+from typing import List, Literal, Optional
+from pydantic import BaseModel
 
 router = APIRouter(prefix="/species", tags=["species"])
 
@@ -45,6 +47,24 @@ def create_new_species(
             detail="Species with this scientific name already exists",
         )
     return create_species(db, species)
+
+
+class AtRankRequest(BaseModel):
+    rank: Literal["genus", "family", "order"]
+    name: str  # e.g. "Ixodes" for rank genus
+
+
+@router.post("/at-rank", response_model=SpeciesRead)
+def species_at_rank(
+    body: AtRankRequest,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Get (or create) the "<Genus> sp." taxon for a genus/family/order already in the taxa table."""
+    sp = get_or_create_at_rank(db, body.rank, body.name)
+    if not sp:
+        raise HTTPException(status_code=404, detail=f"No taxa in {body.rank} {body.name}")
+    return sp
 
 
 @router.get("/{species_id}", response_model=SpeciesRead)

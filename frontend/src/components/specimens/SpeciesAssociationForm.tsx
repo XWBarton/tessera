@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Button, Select, InputNumber, Card, Row, Col } from 'antd'
+import { Button, Select, InputNumber, Card, Row, Col, message } from 'antd'
 import { PlusOutlined, DeleteOutlined } from '@ant-design/icons'
+import { useQueryClient } from '@tanstack/react-query'
 import { useSpecies } from '../../hooks/useSpecies'
+import { getSpeciesAtRank } from '../../api/species'
 import { useLookupOptions } from '../../hooks/useLookups'
 import { AddTaxonModal, RankTag, guessTaxon, type TaxonValues } from '../species/TaxonForm'
 import type { Species, SpecimenSpeciesCreate } from '../../types'
@@ -12,6 +14,7 @@ const CONFIDENCE_OPTIONS = ['Confirmed', 'Probable', 'Possible', 'Unknown'].map(
 }))
 
 const ADD_PREFIX = '__add__:'
+const RANK_PREFIX = '__rank__:' // __rank__:genus:Ixodes
 
 interface Props {
   value?: SpecimenSpeciesCreate[]
@@ -28,6 +31,7 @@ export default function SpeciesAssociationForm({ value = [], onChange }: Props) 
   // Every taxon seen so far, so a row keeps its label when a later search doesn't return it
   const [known, setKnown] = useState<Map<number, Species>>(new Map())
   const [adding, setAdding] = useState<{ index: number; initial: TaxonValues } | null>(null)
+  const qc = useQueryClient()
 
   useEffect(() => {
     if (!speciesList?.length) return
@@ -73,6 +77,46 @@ export default function SpeciesAssociationForm({ value = [], onChange }: Props) 
   const exactMatch = speciesList?.some((s) => s.scientific_name.toLowerCase() === query.toLowerCase())
   const baseOptions = (speciesList ?? []).map((s) => ({ value: s.id, label: optionLabel(s), title: s.scientific_name }))
 
+  // Genera/families matching the search that are already in the list but have no "sp." entry
+  // yet: offer "Ixodes sp." straight away, created on pick with its family/order copied over.
+  const rankOptions = (() => {
+    const q = query.toLowerCase()
+    if (!q || !speciesList) return []
+    const out: { value: string; label: React.ReactNode; title: string }[] = []
+    for (const rank of ['genus', 'family'] as const) {
+      const groups = new Set<string>()
+      for (const s of speciesList) {
+        const g = s[rank]?.trim()
+        if (g && g.toLowerCase().includes(q)) groups.add(g)
+      }
+      for (const g of [...groups].sort().slice(0, 3)) {
+        const name = `${g} sp.`
+        const exists = speciesList.some(
+          (s) => (s.rank === rank && s[rank]?.toLowerCase() === g.toLowerCase()) || s.scientific_name.toLowerCase() === name.toLowerCase(),
+        )
+        if (!exists) {
+          out.push({
+            value: `${RANK_PREFIX}${rank}:${g}`,
+            title: name,
+            label: <span><em>{name}</em><RankTag rank={rank} /> <span style={{ opacity: 0.6 }}>(only identified to {rank})</span></span>,
+          })
+        }
+      }
+    }
+    return out
+  })()
+
+  const pickAtRank = async (index: number, rank: 'genus' | 'family', name: string) => {
+    try {
+      const s = await getSpeciesAtRank(rank, name)
+      setKnown((prev) => new Map(prev).set(s.id, s))
+      updateAssoc(index, { species_id: s.id })
+      qc.invalidateQueries({ queryKey: ['species'] })
+    } catch {
+      message.error(`Could not add ${name} sp.`)
+    }
+  }
+
   return (
     <div>
       {value.map((assoc, index) => {
@@ -81,6 +125,7 @@ export default function SpeciesAssociationForm({ value = [], onChange }: Props) 
           ...(selected && !baseOptions.some((o) => o.value === selected.id)
             ? [{ value: selected.id, label: optionLabel(selected), title: selected.scientific_name }]
             : []),
+          ...rankOptions,
           ...baseOptions,
           ...(query && !exactMatch && !isFetching
             ? [{ value: `${ADD_PREFIX}${query}`, label: <span><PlusOutlined /> Add &ldquo;{query}&rdquo; to taxa</span>, title: query }]
@@ -101,6 +146,11 @@ export default function SpeciesAssociationForm({ value = [], onChange }: Props) 
                   value={assoc.species_id || undefined}
                   status={assoc.species_id ? undefined : 'warning'}
                   onChange={(v) => {
+                    if (typeof v === 'string' && v.startsWith(RANK_PREFIX)) {
+                      const [rank, ...rest] = v.slice(RANK_PREFIX.length).split(':')
+                      pickAtRank(index, rank as 'genus' | 'family', rest.join(':'))
+                      return
+                    }
                     if (typeof v === 'string' && v.startsWith(ADD_PREFIX)) {
                       setAdding({ index, initial: guessTaxon(v.slice(ADD_PREFIX.length)) })
                       return
