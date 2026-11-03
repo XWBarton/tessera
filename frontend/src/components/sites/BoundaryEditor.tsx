@@ -7,7 +7,7 @@ import '@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css'
 import 'leaflet/dist/leaflet.css'
 import type { SiteBoundary } from '../../types'
 import { boundaryAreaHa, circleToPolygon, formatHa } from '../../utils/geo'
-import { MAX_VERTICES, osmPolygonAt, searchOsmPolygons, type OsmResult } from '../../utils/osm'
+import { MAX_VERTICES, fitOutline, osmPolygonAt, searchOsmPolygons, type OsmResult } from '../../utils/osm'
 
 interface EditorApi {
   setBoundary: (b: SiteBoundary | null) => void
@@ -133,10 +133,23 @@ export default function BoundaryEditor({ open, value, lat, lon, radiusM, onCance
   const center: [number, number] = lat != null && lon != null ? [lat, lon] : [-25.5, 134]
   const zoom = lat != null && lon != null ? 14 : 4
 
-  const useOutline = (r: OsmResult) => {
-    if (r.vertices > MAX_VERTICES) {
-      message.error(`That outline has ${r.vertices.toLocaleString()} points (limit ${MAX_VERTICES.toLocaleString()}). Pick a smaller feature.`)
-      return
+  const useOutline = async (found: OsmResult) => {
+    let r: Awaited<ReturnType<typeof fitOutline>> = found
+    if (found.vertices > MAX_VERTICES) {
+      setBusy(true)
+      try {
+        r = await fitOutline(found)
+      } catch (e) {
+        message.error(e instanceof Error ? e.message : 'OpenStreetMap lookup failed')
+        return
+      } finally {
+        setBusy(false)
+      }
+      if (!r) {
+        message.error(`That outline has ${found.vertices.toLocaleString()} points and can't be simplified under ${MAX_VERTICES.toLocaleString()}. Pick a smaller feature.`)
+        return
+      }
+      message.info(`Large outline simplified to about ${r.simplifiedM} m detail (${r.vertices.toLocaleString()} points).`)
     }
     apiRef.current?.setBoundary(r.boundary)
     setOsmPoint(r.lat != null && r.lon != null ? { lat: r.lat, lon: r.lon } : null)
@@ -163,7 +176,7 @@ export default function BoundaryEditor({ open, value, lat, lon, radiusM, onCance
     try {
       const r = await osmPolygonAt(lat, lon, pickZoom)
       if (!r) message.warning('No OpenStreetMap area found there. Try a different feature size or spot.')
-      else useOutline(r)
+      else await useOutline(r)
     } catch (e) {
       message.error(e instanceof Error ? e.message : 'OpenStreetMap lookup failed')
     } finally {
@@ -229,7 +242,7 @@ export default function BoundaryEditor({ open, value, lat, lon, radiusM, onCance
             size="small"
             value={pickZoom}
             onChange={(v) => setPickZoom(v as number)}
-            options={[{ label: 'Plot', value: 18 }, { label: 'Park / reserve', value: 16 }, { label: 'Locality', value: 13 }]}
+            options={[{ label: 'Plot', value: 18 }, { label: 'Park / reserve', value: 16 }, { label: 'Locality', value: 13 }, { label: 'Region', value: 8 }, { label: 'Country', value: 3 }]}
           />
         )}
       </Space>
@@ -249,7 +262,7 @@ export default function BoundaryEditor({ open, value, lat, lon, radiusM, onCance
                 description={
                   <Space size={4}>
                     {r.kind && <Tag>{r.kind}</Tag>}
-                    <span>{formatHa(boundaryAreaHa(r.boundary))}, {r.vertices.toLocaleString()} points</span>
+                    <span>{formatHa(boundaryAreaHa(r.boundary))}, {r.vertices.toLocaleString()} points{r.vertices > MAX_VERTICES ? ' (will be simplified)' : ''}</span>
                   </Space>
                 }
               />
