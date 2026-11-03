@@ -14,6 +14,9 @@ import type { Specimen } from '../../types'
 import { DIM, DIM_OPTIONS, speciesLabel, weightOf, type DimKey } from './dimensions'
 import { makeColorScale, OTHER } from './colors'
 import type { ExploreData } from './useExploreData'
+import SiteAreaLayer, { AreaSwatch } from '../map/SiteAreaLayer'
+import { placedByArea, placeSpecimens } from '../../utils/specimenPlace'
+import { boundaryBounds } from '../../utils/geo'
 
 const PRECISION_RADIUS_M: Record<string, number> = {
   Suburb: 1500, City: 8000, Region: 50000, State: 150000,
@@ -98,8 +101,9 @@ export default function MapView({ data }: { data: ExploreData }) {
   const [playing, setPlaying] = useState(false)
   const [fitTrigger, setFitTrigger] = useState(0)
 
+  // Tubes that can go on the map: their own point, or their site's outline (e.g. "Azores")
   const geo = useMemo(
-    () => data.filtered.filter((s) => s.collection_lat != null && s.collection_lon != null),
+    () => data.filtered.filter((s) => placedByArea(s) || (s.collection_lat != null && s.collection_lon != null)),
     [data.filtered]
   )
 
@@ -138,13 +142,22 @@ export default function MapView({ data }: { data: ExploreData }) {
     })
   }, [geo, frame, months, playback])
 
+  const { points: visiblePoints, areas } = useMemo(() => placeSpecimens(visible), [visible])
+
   const scale = useMemo(() => makeColorScale(geo, colorBy, DIM[colorBy].values, data.measure), [geo, colorBy, data.measure])
   // Heat intensity follows the chosen measure; tubes with no specimen count still register faintly.
   const heatPoints = useMemo(
-    () => visible.map((s) => [s.collection_lat!, s.collection_lon!, Math.max(0.2, weightOf(s, data.measure))] as [number, number, number]),
-    [visible, data.measure]
+    () => visiblePoints.map((s) => [s.collection_lat!, s.collection_lon!, Math.max(0.2, weightOf(s, data.measure))] as [number, number, number]),
+    [visiblePoints, data.measure]
   )
-  const allPoints = useMemo(() => geo.map((s) => [s.collection_lat!, s.collection_lon!] as [number, number]), [geo])
+  // Everything to fit the view to: points plus the corners of each outline
+  const allPoints = useMemo(() => {
+    const { points, areas: all } = placeSpecimens(geo)
+    return [
+      ...points.map((s) => [s.collection_lat!, s.collection_lon!] as [number, number]),
+      ...all.flatMap((a) => boundaryBounds(a.boundary)),
+    ]
+  }, [geo])
 
   // Re-fit whenever the filtered set changes (not while scrubbing through time).
   useEffect(() => { setFitTrigger((n) => n + 1) }, [geo])
@@ -199,9 +212,15 @@ export default function MapView({ data }: { data: ExploreData }) {
 
           {mode === 'heatmap' && <HeatLayer points={heatPoints} />}
 
+          <SiteAreaLayer
+            areas={areas}
+            colorOf={mode === 'heatmap' ? () => '#595959' : scale.of}
+            speciesOf={speciesLabel}
+          />
+
           {mode === 'clusters' && (
             <MarkerClusterGroup key={`${colorBy}-${frame}-${playback}`} chunkedLoading showCoverageOnHover={false}>
-              {visible.map((s) => (
+              {visiblePoints.map((s) => (
                 <Marker key={s.id} position={[s.collection_lat!, s.collection_lon!]} icon={dotIcon(scale.of(s))}>
                   <SpecimenPopup s={s} />
                 </Marker>
@@ -209,7 +228,7 @@ export default function MapView({ data }: { data: ExploreData }) {
             </MarkerClusterGroup>
           )}
 
-          {mode === 'points' && visible.map((s) => {
+          {mode === 'points' && visiblePoints.map((s) => {
             const color = scale.of(s)
             const radiusM = PRECISION_RADIUS_M[s.sites?.[0]?.precision || 'GPS']
             const pos: [number, number] = [s.collection_lat!, s.collection_lon!]
@@ -279,9 +298,14 @@ export default function MapView({ data }: { data: ExploreData }) {
             })}
           </>
         )}
+        {areas.length > 0 && (
+          <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12 }}>
+            <AreaSwatch /> Area only
+          </span>
+        )}
         <span style={{ color: '#888', fontSize: 12, marginLeft: 'auto' }}>
           {visible.length} of {data.filtered.length} tubes shown on map
-          {geo.length < data.filtered.length && ` · ${data.filtered.length - geo.length} without coordinates`}
+          {geo.length < data.filtered.length && ` · ${data.filtered.length - geo.length} with no coordinates or site outline`}
         </span>
       </div>
     </div>

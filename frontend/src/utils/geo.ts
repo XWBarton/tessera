@@ -41,3 +41,18 @@ export function formatHa(ha: number): string {
   if (ha >= 1) return `${ha.toFixed(1)} ha`
   return `${(ha * 10000).toFixed(0)} m²`
 }
+
+/** South-west and north-east corners of a boundary, as [lat, lon] pairs. */
+export function boundaryBounds(b: SiteBoundary): [[number, number], [number, number]] {
+  const polys = (b.type === 'Polygon' ? [b.coordinates] : b.coordinates) as number[][][][]
+  let minLat = 90, maxLat = -90, minLon = 180, maxLon = -180
+  for (const rings of polys) {
+    for (const [lon, lat] of rings[0]) {
+      if (lat < minLat) minLat = lat
+      if (lat > maxLat) maxLat = lat
+      if (lon < minLon) minLon = lon
+      if (lon > maxLon) maxLon = lon
+    }
+  }
+  return [[minLat, minLon], [maxLat, maxLon]]
+}

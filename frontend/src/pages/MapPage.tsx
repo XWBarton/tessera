@@ -2,6 +2,10 @@ import { useMemo } from 'react'
 import { Typography, Card } from 'antd'
 import { MapContainer, TileLayer, LayersControl, CircleMarker, Circle, Popup } from 'react-leaflet'
 import { useSpecimens } from '../hooks/useSpecimens'
+import SiteAreaLayer, { AreaSwatch } from '../components/map/SiteAreaLayer'
+import { placeSpecimens } from '../utils/specimenPlace'
+import { boundaryBounds } from '../utils/geo'
+import type { Specimen } from '../types'
 import 'leaflet/dist/leaflet.css'
 
 const OSM_LAYER = (
@@ -41,21 +45,26 @@ const PRECISION_LABEL: Record<string, string> = {
   State:  'State',
 }
 
+const colorOf = (s: Specimen) => {
+  const first = s.species_associations[0]
+  return first ? CONFIDENCE_COLORS[first.confidence] || '#757575' : '#757575'
+}
+const speciesOf = (s: Specimen) => s.species_associations[0]?.species?.scientific_name || 'Unknown species'
+
 export default function MapPage() {
   const { data } = useSpecimens({ limit: 2000 })
 
-  const specimens = useMemo(
-    () =>
-      (data?.items || []).filter(
-        (s) => s.collection_lat != null && s.collection_lon != null
-      ),
-    [data]
-  )
+  // Tubes known only to a site with an outline (e.g. "Azores") are drawn as that outline
+  const { points: specimens, areas } = useMemo(() => placeSpecimens(data?.items || []), [data])
+  const areaTubes = areas.reduce((t, a) => t + a.specimens.length, 0)
 
+  const firstArea = areas[0] ? boundaryBounds(areas[0].boundary) : null
   const center: [number, number] =
     specimens.length > 0
       ? [specimens[0].collection_lat!, specimens[0].collection_lon!]
-      : [0, 0]
+      : firstArea
+        ? [(firstArea[0][0] + firstArea[1][0]) / 2, (firstArea[0][1] + firstArea[1][1]) / 2]
+        : [0, 0]
 
   // Which precision levels are present (for legend)
   const presentPrecisions = useMemo(() => {
@@ -72,7 +81,7 @@ export default function MapPage() {
       <Card bodyStyle={{ padding: 0, overflow: 'hidden', borderRadius: 8 }}>
         <MapContainer
           center={center}
-          zoom={specimens.length > 0 ? 8 : 2}
+          zoom={specimens.length > 0 ? 8 : firstArea ? 6 : 2}
           style={{ height: '70vh', width: '100%' }}
         >
           <LayersControl position="topright">
@@ -83,9 +92,10 @@ export default function MapPage() {
               {SATELLITE_LAYER}
             </LayersControl.BaseLayer>
           </LayersControl>
+          <SiteAreaLayer areas={areas} colorOf={colorOf} speciesOf={speciesOf} />
           {specimens.map((s) => {
             const first = s.species_associations[0]
-            const color = first ? CONFIDENCE_COLORS[first.confidence] || '#757575' : '#757575'
+            const color = colorOf(s)
             const precision = s.sites?.[0]?.precision || 'GPS'
             const radiusM = PRECISION_RADIUS_M[precision]
             const pos: [number, number] = [s.collection_lat!, s.collection_lon!]
@@ -193,7 +203,14 @@ export default function MapPage() {
           </div>
         )}
 
-        {specimens.length === 0 && (
+        {areas.length > 0 && (
+          <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12 }}>
+            <AreaSwatch />
+            Area only ({areaTubes} tube{areaTubes !== 1 ? 's' : ''} located to a site outline)
+          </span>
+        )}
+
+        {specimens.length === 0 && areas.length === 0 && (
           <span style={{ color: '#888', fontSize: 12 }}>
             No tubes with coordinates to display.
           </span>
