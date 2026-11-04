@@ -252,7 +252,7 @@ export default function HelpPage() {
                 Species list & bulk import
               </Title>
               <Paragraph style={{ marginBottom: 0 }}>
-                Go to <Text strong>Species</Text> in the sidebar (under Reference) to view and manage the species reference list. Each species entry can store genus, family, and order for taxonomic filtering. Admins can bulk-import species from a CSV file — click <Text strong>Import CSV</Text> on the Species page and upload a file with a <Text code>scientific_name</Text> column (genus, family, and order columns are optional).
+                Go to <Text strong>Species</Text> in the sidebar (under Reference) to view and manage the species reference list. Each species entry can store genus, family, and order for taxonomic filtering. Entries identified only to genus, family, or order (such as "Ixodes sp.") are hidden from this list unless you turn on <Text strong>Show genus/family-level entries</Text>; you can still pick them on a tube. Admins can bulk-import species from a CSV file — click <Text strong>Import CSV</Text> on the Species page and upload a file with a <Text code>scientific_name</Text> column (genus, family, and order columns are optional).
               </Paragraph>
             </Card>
           ),

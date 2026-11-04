@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { Input, Button, Space, Typography, Popconfirm, Card, Descriptions, Empty, theme } from 'antd'
 import { EditOutlined, DeleteOutlined, CloseOutlined } from '@ant-design/icons'
 import type { Species } from '../../types'
-import { RankTag, type TaxonValues } from './TaxonForm'
+import { RankTag, isSpeciesRank } from './TaxonForm'
 
 const UNASSIGNED = 'Unassigned'
 const PALETTE = ['#1677ff', '#52c41a', '#fa8c16', '#eb2f96', '#722ed1', '#13c2c2', '#d4b106', '#f5222d']
@@ -24,12 +24,9 @@ interface TaxonNode {
   count: number
   color: string
   children?: TaxonNode[]
-  /** Taxonomy of a group node, used to pre-fill "add Ixodes sp." */
-  path?: TaxonValues
 }
 
 const RANK_DEPTH: Record<string, number> = { order: 0, family: 1, genus: 2, species: 3 }
-const ADD_W = 22 // room for the "+" on genus/family nodes
 
 const NEXT_RANK: Record<string, Rank | undefined> = { order: 'family', family: 'genus', genus: undefined }
 
@@ -43,9 +40,13 @@ const byName = (a: Species, b: Species) => a.scientific_name.localeCompare(b.sci
 
 // Group species by Order > Family > Genus; species sit at the leaves. An entry identified only
 // to family or order ("Ixodidae sp.") becomes a leaf directly under that family/order node.
+// With showAboveSpecies off those entries still create their group nodes but get no leaf, so
+// "Ixodes sp." alone leaves an empty Ixodes node. Counts are of the leaves actually shown.
 function buildTree(
-  species: Species[], rank: Rank = 'order', parentKey = '', color?: string, path: TaxonValues = {},
+  species: Species[], showAboveSpecies: boolean, rank: Rank = 'order', parentKey = '', color?: string,
 ): TaxonNode[] {
+  const leaves = (list: Species[], c: string) =>
+    list.filter((s) => showAboveSpecies || isSpeciesRank(s)).sort(byName).map((s) => leaf(s, c))
   const groups = new Map<string, Species[]>()
   for (const s of species) {
     const k = rankValue(s, rank)
@@ -60,19 +61,16 @@ function buildTree(
       const key = `${parentKey}/${rank}:${name}`
       // Each order gets its own colour; everything beneath inherits it
       const c = color ?? (name === UNASSIGNED ? NEUTRAL : PALETTE[i % PALETTE.length])
-      const field = rank === 'order' ? 'order_name' : rank
-      const nodePath: TaxonValues = { ...path, [field]: name === UNASSIGNED ? undefined : name }
       let children: TaxonNode[]
       if (next) {
         // Entries that stop at this rank sit here instead of descending into "Unassigned"
         const stopsHere = (s: Species) => (RANK_DEPTH[s.rank ?? 'species'] ?? 3) <= RANK_DEPTH[rank]
-        const here = members.filter(stopsHere).sort(byName)
         const deeper = members.filter((s) => !stopsHere(s))
-        children = [...here.map((s) => leaf(s, c)), ...buildTree(deeper, next, key, c, nodePath)]
+        children = [...leaves(members.filter(stopsHere), c), ...buildTree(deeper, showAboveSpecies, next, key, c)]
       } else {
-        children = [...members].sort(byName).map((s) => leaf(s, c))
+        children = leaves(members, c)
       }
-      return { key, name, rank, count: members.length, color: c, children, path: nodePath }
+      return { key, name, rank, count: children.reduce((t, k) => t + k.count, 0), color: c, children }
     })
 }
 
@@ -110,8 +108,6 @@ interface Laid {
   children: Laid[]
 }
 
-const addable = (n: TaxonNode) => (n.rank === 'genus' || n.rank === 'family') && n.name !== UNASSIGNED
-
 function labelOf(n: TaxonNode): string {
   if (n.species) return n.species.common_name ? `${n.species.scientific_name}  ${n.species.common_name}` : n.species.scientific_name
   return n.rank === 'root' ? n.name : `${n.name}  ${n.count}`
@@ -122,7 +118,7 @@ function layoutTree(root: TaxonNode, collapsed: Set<string>, forceOpen: boolean)
   const widths: number[] = []
 
   const place = (node: TaxonNode, depth: number): Laid => {
-    const w = Math.max(labelOf(node).length * CHAR_W + 34 + (addable(node) ? ADD_W : 0), 64)
+    const w = Math.max(labelOf(node).length * CHAR_W + 34, 64)
     widths[depth] = Math.max(widths[depth] ?? 0, w)
     const folded = !forceOpen && node.rank !== 'root' && !!node.children?.length && collapsed.has(node.key)
     if (!node.children?.length || folded) {
@@ -154,13 +150,12 @@ function flatten(l: Laid, out: Laid[] = []): Laid[] {
   return out
 }
 
-export default function SpeciesTree({ species, canEdit, onEdit, onDelete, onAddUnder }: {
+export default function SpeciesTree({ species, showAboveSpecies, canEdit, onEdit, onDelete }: {
   species: Species[]
+  showAboveSpecies: boolean
   canEdit: boolean
   onEdit: (s: Species) => void
   onDelete: (s: Species) => void
-  /** Open the add-taxon form pre-filled for a genus/family node ("Ixodes sp.") */
-  onAddUnder?: (initial: TaxonValues) => void
 }) {
   const { token } = theme.useToken()
   const [search, setSearch] = useState('')
@@ -168,7 +163,7 @@ export default function SpeciesTree({ species, canEdit, onEdit, onDelete, onAddU
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const q = search.trim().toLowerCase()
 
-  const groups = useMemo(() => buildTree(species), [species])
+  const groups = useMemo(() => buildTree(species, showAboveSpecies), [species, showAboveSpecies])
   const visible = useMemo(() => (q ? filterTree(groups, q) : groups), [groups, q])
   const root: TaxonNode = useMemo(
     () => ({
@@ -184,7 +179,9 @@ export default function SpeciesTree({ species, canEdit, onEdit, onDelete, onAddU
   // Expand everything while searching so matches are visible
   const { laid, width, height } = useMemo(() => layoutTree(root, collapsed, !!q), [root, collapsed, q])
   const nodes = useMemo(() => flatten(laid), [laid])
-  const selected = selectedId != null ? species.find((s) => s.id === selectedId) : undefined
+  const selected = selectedId != null
+    ? species.find((s) => s.id === selectedId && (showAboveSpecies || isSpeciesRank(s)))
+    : undefined
 
   const toggle = (key: string) =>
     setCollapsed((prev) => {
@@ -229,7 +226,6 @@ export default function SpeciesTree({ species, canEdit, onEdit, onDelete, onAddU
         <Button size="small" onClick={() => setCollapsed(new Set(groupKeys(groups)))}>Collapse all</Button>
         <Typography.Text type="secondary" style={{ fontSize: 13 }}>
           Order → Family → Genus → Species. Click a branch to fold it, or a species for its details.
-          {onAddUnder && ' Use + on a genus or family to add an "sp." entry.'}
         </Typography.Text>
       </Space>
 
@@ -303,7 +299,7 @@ export default function SpeciesTree({ species, canEdit, onEdit, onDelete, onAddU
                   ? token.colorBgContainer
                   : `${node.color}22`
               const textFill = isRoot ? token.colorBgContainer : token.colorText
-              const clickable = isGroup || isSpecies
+              const clickable = isSpecies || (isGroup && !!node.children?.length)
               const onActivate = () => {
                 if (isGroup) toggle(node.key)
                 else if (isSpecies) setSelectedId(active ? null : node.species!.id)
@@ -332,29 +328,6 @@ export default function SpeciesTree({ species, canEdit, onEdit, onDelete, onAddU
                     <circle cx={13} cy={NODE_H / 2} r={4} fill={l.folded ? node.color : 'none'} stroke={node.color} strokeWidth={1.5} />
                   )}
                   {isSpecies && <circle cx={13} cy={NODE_H / 2} r={3} fill={node.color} />}
-                  {onAddUnder && addable(node) && (
-                    <g
-                      transform={`translate(${l.w - 14},${NODE_H / 2})`}
-                      role="button"
-                      tabIndex={0}
-                      aria-label={`Add ${node.name} sp.`}
-                      style={{ cursor: 'pointer' }}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        onAddUnder({ ...node.path, rank: node.rank as 'genus' | 'family', scientific_name: `${node.name} sp.` })
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault(); e.stopPropagation()
-                          onAddUnder({ ...node.path, rank: node.rank as 'genus' | 'family', scientific_name: `${node.name} sp.` })
-                        }
-                      }}
-                    >
-                      <title>{`Add ${node.name} sp.`}</title>
-                      <circle r={8} fill={token.colorBgContainer} stroke={node.color} strokeWidth={1.25} />
-                      <path d="M-4,0H4M0,-4V4" stroke={node.color} strokeWidth={1.5} />
-                    </g>
-                  )}
                   <text
                     x={isRoot ? 14 : 24}
                     y={NODE_H / 2}

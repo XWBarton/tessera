@@ -20,6 +20,9 @@ const RANK_FIELD: Record<Exclude<TaxonRank, 'species'>, RankField> = {
 type TaxonKey = 'scientific_name' | 'common_name' | 'notes' | 'genus' | 'family' | 'order_name' | 'taxon_id' | 'rank'
 export type TaxonValues = { [K in TaxonKey]?: Species[K] | null }
 
+/** False for an entry like "Ixodes sp.", which stops at genus, family or order. */
+export const isSpeciesRank = (s: Species) => (s.rank ?? 'species') === 'species'
+
 /** Small tag marking an identification that stops above species level. */
 export function RankTag({ rank }: { rank?: TaxonRank }) {
   if (!rank || rank === 'species') return null

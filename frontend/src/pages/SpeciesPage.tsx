@@ -1,5 +1,5 @@
-import { useRef, useState } from 'react'
-import { Typography, Table, Button, Modal, Form, Space, message, Popconfirm, Alert, Segmented } from 'antd'
+import { useMemo, useRef, useState } from 'react'
+import { Typography, Table, Button, Modal, Form, Space, message, Popconfirm, Alert, Segmented, Switch } from 'antd'
 import { PlusOutlined, DeleteOutlined, EditOutlined, UploadOutlined, ApartmentOutlined, TableOutlined } from '@ant-design/icons'
 import { useSpecies, useUpdateSpecies, useDeleteSpecies } from '../hooks/useSpecies'
 import { useAuth } from '../context/AuthContext'
@@ -7,15 +7,14 @@ import { importSpeciesCSV } from '../api/species'
 import { useQueryClient } from '@tanstack/react-query'
 import type { Species } from '../types'
 import SpeciesTree from '../components/species/SpeciesTree'
-import { AddTaxonModal, RankTag, SpeciesFields, normaliseTaxon, type TaxonValues } from '../components/species/TaxonForm'
+import { AddTaxonModal, RankTag, SpeciesFields, isSpeciesRank, normaliseTaxon, type TaxonValues } from '../components/species/TaxonForm'
 
 export default function SpeciesPage() {
   const { user } = useAuth()
   const { data: species, isLoading } = useSpecies()
   const deleteSpecies = useDeleteSpecies()
   const queryClient = useQueryClient()
-  // undefined = closed; an object (possibly empty) = open with those values pre-filled
-  const [addInitial, setAddInitial] = useState<TaxonValues | undefined>(undefined)
+  const [addOpen, setAddOpen] = useState(false)
   const [editingSpecies, setEditingSpecies] = useState<Species | null>(null)
   const updateSpecies = useUpdateSpecies(editingSpecies?.id ?? 0)
   const [importModalOpen, setImportModalOpen] = useState(false)
@@ -30,6 +29,14 @@ export default function SpeciesPage() {
     setView(v)
     try { localStorage.setItem('speciesView', v) } catch { /* per-viewer convenience only */ }
   }
+
+  // "Ixodes sp." records how far a tube was identified, not a species, so it stays out of the
+  // reference list unless asked for. The switch keeps those entries reachable for editing.
+  const [showAboveSpecies, setShowAboveSpecies] = useState(false)
+  const tableRows = useMemo(
+    () => (showAboveSpecies ? species : species?.filter(isSpeciesRank)),
+    [species, showAboveSpecies],
+  )
 
   const handleEdit = async (values: TaxonValues) => {
     try {
@@ -142,6 +149,10 @@ export default function SpeciesPage() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <Typography.Title level={3} style={{ margin: 0 }}>Species Lookup</Typography.Title>
         <Space>
+          <Space size={6}>
+            <Switch size="small" id="show-above-species" checked={showAboveSpecies} onChange={setShowAboveSpecies} />
+            <label htmlFor="show-above-species">Show genus/family-level entries</label>
+          </Space>
           <Segmented
             value={view}
             onChange={(v) => changeView(v as 'tree' | 'table')}
@@ -155,7 +166,7 @@ export default function SpeciesPage() {
             Import CSV
           </Button>
         )}
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => setAddInitial({})}>
+        <Button type="primary" icon={<PlusOutlined />} onClick={() => setAddOpen(true)}>
           Add Taxon
         </Button>
         </Space>
@@ -163,9 +174,9 @@ export default function SpeciesPage() {
       {view === 'tree' ? (
         <SpeciesTree
           species={species ?? []}
+          showAboveSpecies={showAboveSpecies}
           canEdit={!!user?.is_admin}
           onEdit={setEditingSpecies}
-          onAddUnder={setAddInitial}
           onDelete={(s) =>
             deleteSpecies
               .mutateAsync(s.id)
@@ -174,10 +185,18 @@ export default function SpeciesPage() {
           }
         />
       ) : (
-        <Table dataSource={species} columns={columns} rowKey="id" loading={isLoading} />
+        <Table dataSource={tableRows} columns={columns} rowKey="id" loading={isLoading} />
       )}
 
-      <AddTaxonModal open={!!addInitial} initial={addInitial} onClose={() => setAddInitial(undefined)} />
+      <AddTaxonModal
+        open={addOpen}
+        onClose={() => setAddOpen(false)}
+        onCreated={(s) => {
+          if (s.rank !== 'species' && !showAboveSpecies) {
+            message.info(`${s.scientific_name} is hidden here until you turn on "Show genus/family-level entries"`)
+          }
+        }}
+      />
 
       {/* Edit species modal */}
       <Modal
